@@ -1,0 +1,118 @@
+name: Build Desktop App
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Target Platform"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - mac
+          - windows
+          - both
+      publish_type:
+        description: "Publish Type"
+        required: true
+        default: "artifact"
+        type: choice
+        options:
+          - artifact
+          - draft
+          - release
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+      publish_type:
+        required: true
+        type: string
+    secrets:
+      GH_TOKEN:
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # Mac Derleme İşi
+  build-mac:
+    if: inputs.platform == 'mac' || inputs.platform == 'both'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install System Dependencies (macOS)
+        run: brew install pkg-config cairo pango jpeg giflib librsvg pixman
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build
+
+      - name: Package & Publish Electron App
+        shell: bash
+        run: |
+          PUBLISH_STRATEGY="never"
+          if [ "${{ inputs.publish_type }}" = "draft" ] || [ "${{ inputs.publish_type }}" = "release" ]; then
+            PUBLISH_STRATEGY="always"
+          fi
+          npx electron-builder --mac --publish $PUBLISH_STRATEGY
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-builders-mac
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/latest*.yml
+            dist/*.blockmap
+          if-no-files-found: error
+
+  # Windows Derleme İşi
+  build-windows:
+    if: inputs.platform == 'windows' || inputs.platform == 'both'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build
+
+      - name: Package & Publish Electron App
+        shell: bash
+        run: |
+          PUBLISH_STRATEGY="never"
+          if [ "${{ inputs.publish_type }}" = "draft" ] || [ "${{ inputs.publish_type }}" = "release" ]; then
+            PUBLISH_STRATEGY="always"
+          fi
+          npx electron-builder --win --publish $PUBLISH_STRATEGY
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-builders-win
+          path: |
+            dist/*.exe
+            dist/latest*.yml
+            dist/*.blockmap
+          if-no-files-found: error

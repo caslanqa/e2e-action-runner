@@ -1,0 +1,196 @@
+name: Electron Production & Release Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'SemVer Release Type (Ignored if Build Only)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - none_build_only
+      platform:
+        description: 'Target Platform'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - mac
+          - windows
+      publish_type:
+        description: 'Publish Strategy'
+        required: true
+        default: 'artifact'
+        type: choice
+        options:
+          - artifact
+          - draft
+          - release
+
+permissions:
+  contents: write
+
+jobs:
+  # 1. ADIM: Gerekirse Versiyon Yükseltme ve Tag Oluşturma
+  bump-and-tag:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.version_type != 'none_build_only'
+    outputs:
+      new_tag: ${{ steps.git-commit.outputs.tag_name }}
+      should_release: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Bump Version (npm)
+        id: npm-bump
+        run: |
+          NEW_VERSION=$(npm version ${{ github.event.inputs.version_type }} --no-git-tag-version)
+          echo "NEW_VER=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Commit & Push Changes
+        id: git-commit
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore(release): ${{ env.NEW_VER }} [skip ci]"
+          git tag -a "${{ env.NEW_VER }}" -m "Release ${{ env.NEW_VER }}"
+          git push origin main --tags
+          echo "tag_name=${{ env.NEW_VER }}" >> $GITHUB_OUTPUT
+
+  # 2. ADIM: Dinamik Matris ile Derleme (Build) İşlemleri
+  compile:
+    needs: bump-and-tag
+    if: always() && (needs.bump-and-tag.result == 'success' || github.event.inputs.version_type == 'none_build_only')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac
+            platform_key: mac
+          - os: windows-latest
+            target: win
+            platform_key: windows
+
+    steps:
+      # Kullanıcının seçmediği platform runner'ını hemen sonlandırır
+      - name: Filter Platform
+        id: filter
+        shell: bash
+        run: |
+          SELECTED="${{ github.event.inputs.platform }}"
+          CURRENT="${{ matrix.platform_key }}"
+          if [ "$SELECTED" != "both" ] && [ "$SELECTED" != "$CURRENT" ]; then
+            echo "RUN_JOB=false" >> $GITHUB_OUTPUT
+          else
+            echo "RUN_JOB=true" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.filter.outputs.RUN_JOB == 'true'
+        with:
+          # Eğer üst adımda yeni tag oluşturulduysa onu çek, yoksa güncel commit'i kullan
+          ref: ${{ needs.bump-and-tag.outputs.new_tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        if: steps.filter.outputs.RUN_JOB == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      # Canvas kütüphanesinin yerel (native C++) derleme gereksinimleri
+      - name: Install System Dependencies (macOS)
+        if: steps.filter.outputs.RUN_JOB == 'true' && matrix.os == 'macos-latest'
+        run: brew install pkg-config cairo pango jpeg giflib librsvg pixman
+
+      - name: Install System Dependencies (Windows)
+        if: steps.filter.outputs.RUN_JOB == 'true' && matrix.os == 'windows-latest'
+        run: npm install --global node-gyp
+
+      - name: Install Node Dependencies
+        if: steps.filter.outputs.RUN_JOB == 'true'
+        run: npm ci
+
+      - name: Build UI
+        if: steps.filter.outputs.RUN_JOB == 'true'
+        run: npm run build
+
+      # Auto-Updater uyumluluğu için üretilen yan yml ve blockmap dosyalarını korur
+      - name: Package Electron App
+        if: steps.filter.outputs.RUN_JOB == 'true'
+        shell: bash
+        run: |
+          PUBLISH_STRATEGY="never"
+          if [ "${{ github.event.inputs.publish_type }}" = "draft" ] || [ "${{ github.event.inputs.publish_type }}" = "release" ]; then
+            PUBLISH_STRATEGY="always"
+          fi
+          npx electron-builder --${{ matrix.target }} --publish $PUBLISH_STRATEGY
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Platform Artifacts
+        if: steps.filter.outputs.RUN_JOB == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-dist-${{ matrix.target }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.zip
+            dist/latest*.yml
+            dist/*.blockmap
+          if-no-files-found: error
+
+  # 3. ADIM: Çıktıları GitHub Release Üzerinde Toplama
+  finalize-release:
+    needs: [bump-and-tag, compile]
+    runs-on: ubuntu-latest
+    if: always() && (github.event.inputs.publish_type == 'draft' || github.event.inputs.publish_type == 'release') && github.event.inputs.version_type != 'none_build_only'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Consolidate Artifacts
+        run: |
+          mkdir consolidated_dist
+          find all-artifacts -type f -exec cp {} consolidated_dist/ \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.bump-and-tag.outputs.new_tag }}
+          name: Release ${{ needs.bump-and-tag.outputs.new_tag }}
+          draft: ${{ github.event.inputs.publish_type == 'draft' }}
+          prerelease: false
+          files: |
+            consolidated_dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Release Summary
+        run: |
+          echo "### 🚀 Dağıtım Süreci Başarıyla Tamamlandı!" >> $GITHUB_STEP_SUMMARY
+          echo "Versiyon: \`${{ needs.bump-and-tag.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Strateji: \`${{ github.event.inputs.publish_type }}\`" >> $GITHUB_STEP_SUMMARY

@@ -35,7 +35,7 @@
     "vite": "^6.0.5"
   },
   "build": {
-    "appId": "eu.datanoesis.e2erunner",
+    "appId": "caslanqa.e2erunner",
     "productName": "E2E Action Runner",
     "publish": {
       "provider": "github",
