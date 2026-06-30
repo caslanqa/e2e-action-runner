@@ -19,14 +19,16 @@ stored encrypted in the OS keychain — it is only ever sent to GitHub.
 
 ### 1. Install
 
-Download the installer for your OS from the project's **Releases** page:
+Download the installer for your OS from the project's **[Releases](../../releases/latest)** page
+(the repo is public — no login needed):
 
-| OS | File | First‑launch note (unsigned build, one time only) |
+| OS | Download | First launch (unsigned build, one time only) |
 | --- | --- | --- |
-| macOS | `E2E Action Runner-<version>.dmg` | Open the .dmg, drag the app to **Applications**. If macOS blocks it ("unidentified developer"), **right‑click the app → Open → Open**. |
-| Windows | `E2E Action Runner Setup <version>.exe` | Run it. If SmartScreen warns, click **More info → Run anyway**. |
+| macOS (Apple Silicon) | `E2E.Action.Runner-<version>-arm64.dmg` | Open the .dmg, drag the app to **Applications**. If macOS blocks it ("unidentified developer"), **right‑click the app → Open → Open**. |
+| Windows | `E2E.Action.Runner.Setup.<version>.exe` | Run it. If SmartScreen warns, click **More info → Run anyway**. |
 
-> Building/publishing the installers is the maintainer's job — see *For maintainers* below.
+> macOS builds are currently **Apple Silicon (arm64)** only. On an Intel Mac, ask the
+> maintainer for an Intel/universal build (see *Publishing a release*).
 
 ### 2. Add your GitHub token (one‑time)
 
@@ -76,8 +78,8 @@ repo. Saving a new repo reloads its workflows and branches.
 | "Token rejected (invalid or expired)" | The PAT expired or has wrong scopes — create a new one (Actions R/W · Contents R · Metadata R). |
 | Workflows don't load right after the first save | Bring the window to front and approve the one‑time macOS Keychain prompt. |
 | "This artifact has no viewable HTML report" | That artifact is raw data (e.g. allure‑results), not an HTML report — use **Download**. |
-| Can't download installers from Releases | The repo is private — sign in to GitHub with an account that has access. |
-| Report opens fully light/dark | The Playwright report follows your system color scheme. |
+| App won't open on an Intel Mac | The current macOS build is Apple Silicon only — request an Intel/universal build. |
+| Report looks too light/dark | The Playwright report follows your system color scheme. |
 
 ---
 
@@ -119,28 +121,41 @@ npm run dist:win     # .exe installer — must run on Windows
 Output is written to `release/`. `.dmg` builds only on macOS and `.exe` only on Windows, so
 use CI to produce both.
 
-### Publish a release (recommended)
+### Publishing a release
 
-`.github/workflows/build-desktop.yml` builds macOS + Windows on their native runners and
-attaches the installers to a GitHub Release.
+Releases are produced by the **Electron Production & Release Pipeline**
+(`.github/workflows/publish.yml`). It bumps the version, tags, builds macOS + Windows on
+native runners, and attaches the installers to a single GitHub Release.
 
-```bash
-# 1) bump "version" in package.json (e.g. 0.1.0 -> 0.1.1)
-# 2) tag and push
-git tag v0.1.1
-git push origin main --tags
-```
+1. GitHub → **Actions** → **Electron Production & Release Pipeline** → **Run workflow**.
+2. Choose the inputs:
+   - **SemVer Release Type** — `patch` / `minor` / `major` (or `none_build_only` to just build).
+   - **Target Platform** — `both` (or a single OS).
+   - **Publish Strategy** — `draft` (recommended: review, then publish), `release` (publish immediately), or `artifact` (no release, run artifacts only).
+3. The pipeline bumps `package.json`, commits + tags, builds both OSes, and creates the release.
+4. For `draft`: open **Releases**, review, then click **Publish release**. Colleagues download from there.
 
-The workflow creates a **draft** release named after the tag with both installers attached.
-Review it under **Releases**, then click **Publish release** — colleagues download from there.
+**One copy of each asset — by design.** electron-builder runs with `--publish never`; the
+release is created *only once*, by the `finalize-release` step (softprops). Letting
+electron-builder publish as well would upload every asset twice (this was the old
+duplicate‑assets bug). `build.yml` is a **build‑only** helper — it produces run artifacts and
+never creates a release.
 
-- **Manual build:** Actions → *Build desktop app* → *Run workflow* builds and uploads the
-  installers as run artifacts without creating a release (handy for testing).
-- **Token:** the workflow uses the built‑in `GITHUB_TOKEN` (`permissions: contents: write`) —
-  no extra secret needed. If your org restricts this, enable write access for Actions.
-- **Code signing** is not set up, so installers are unsigned (see the Gatekeeper / SmartScreen
-  notes above). For friction‑free company‑wide installs, add an Apple Developer ID + a Windows
-  signing certificate later.
+Assets attached to each release:
+
+| Asset | Platform |
+| --- | --- |
+| `E2E.Action.Runner.Setup.<version>.exe` (+ `.blockmap`) | Windows installer |
+| `E2E.Action.Runner-<version>-arm64.dmg` (+ `.blockmap`) | macOS (Apple Silicon) |
+| `E2E.Action.Runner-<version>-arm64-mac.zip` (+ `.blockmap`) | macOS auto‑update package |
+| `latest.yml` / `latest-mac.yml` | auto‑update metadata (don't delete) |
+
+> **Intel Macs:** the macOS job builds for the runner's arch (arm64). To also ship Intel,
+> build the mac target with `--x64` or `--universal` (e.g. a second matrix entry).
+>
+> **Code signing** is not set up, so installers are unsigned (hence the Gatekeeper /
+> SmartScreen prompts above). Add an Apple Developer ID + a Windows signing certificate for
+> friction‑free installs.
 
 ### Required PAT permissions (on the target repo)
 
@@ -156,7 +171,9 @@ Review it under **Releases**, then click **Publish release** — colleagues down
 server/    Fastify API — github.js (Octokit), app.js (routes + static), report.js (artifact unzip)
 electron/  Electron main + preload (CommonJS)
 web/       React + Vite UI
-.github/   build-desktop.yml release workflow
+.github/workflows/
+  publish.yml   Release pipeline (bump → build mac+win → single GitHub Release)
+  build.yml     Build-only (run artifacts, never publishes)
 ```
 
 ### npm scripts
@@ -168,4 +185,4 @@ web/       React + Vite UI
 | `npm run app` | Build the UI and launch the desktop app |
 | `npm run app:dev` | Launch the desktop app using the existing build |
 | `npm run build` | Build the UI to `dist/` |
-| `npm run dist:mac` / `dist:win` / `dist:all` | Package installers |
+| `npm run dist:mac` / `dist:win` / `dist:all` | Package installers locally |

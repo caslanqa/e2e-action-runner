@@ -1,5 +1,8 @@
 name: Build Desktop App
 
+# Build-only workflow: produces installers as run artifacts. It NEVER creates a
+# release — publishing is owned solely by publish.yml (Electron Production &
+# Release Pipeline) to avoid duplicate release assets.
 on:
   workflow_dispatch:
     inputs:
@@ -12,26 +15,11 @@ on:
           - mac
           - windows
           - both
-      publish_type:
-        description: "Publish Type"
-        required: true
-        default: "artifact"
-        type: choice
-        options:
-          - artifact
-          - draft
-          - release
   workflow_call:
     inputs:
       platform:
         required: true
         type: string
-      publish_type:
-        required: true
-        type: string
-    secrets:
-      GH_TOKEN:
-        required: true
 
 permissions:
   contents: write
@@ -57,16 +45,8 @@ jobs:
       - name: Build UI
         run: npm run build
 
-      - name: Package & Publish Electron App
-        shell: bash
-        run: |
-          PUBLISH_STRATEGY="never"
-          if [ "${{ inputs.publish_type }}" = "draft" ] || [ "${{ inputs.publish_type }}" = "release" ]; then
-            PUBLISH_STRATEGY="always"
-          fi
-          npx electron-builder --mac --publish $PUBLISH_STRATEGY
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Package Electron App (build only)
+        run: npx electron-builder --mac --publish never
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -96,16 +76,8 @@ jobs:
       - name: Build UI
         run: npm run build
 
-      - name: Package & Publish Electron App
-        shell: bash
-        run: |
-          PUBLISH_STRATEGY="never"
-          if [ "${{ inputs.publish_type }}" = "draft" ] || [ "${{ inputs.publish_type }}" = "release" ]; then
-            PUBLISH_STRATEGY="always"
-          fi
-          npx electron-builder --win --publish $PUBLISH_STRATEGY
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Package Electron App (build only)
+        run: npx electron-builder --win --publish never
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

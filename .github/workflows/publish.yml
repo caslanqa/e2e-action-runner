@@ -133,18 +133,13 @@ jobs:
         if: steps.filter.outputs.RUN_JOB == 'true'
         run: npm run build
 
-      # Auto-Updater uyumluluğu için üretilen yan yml ve blockmap dosyalarını korur
+      # Build only — NEVER publish here. The release is created exactly once by
+      # the finalize-release job (softprops). Publishing here as well would
+      # upload every asset twice (electron-builder + softprops). electron-builder
+      # still writes latest*.yml + *.blockmap to release/ for auto-update.
       - name: Package Electron App
         if: steps.filter.outputs.RUN_JOB == 'true'
-        shell: bash
-        run: |
-          PUBLISH_STRATEGY="never"
-          if [ "${{ github.event.inputs.publish_type }}" = "draft" ] || [ "${{ github.event.inputs.publish_type }}" = "release" ]; then
-            PUBLISH_STRATEGY="always"
-          fi
-          npx electron-builder --${{ matrix.target }} --publish $PUBLISH_STRATEGY
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --${{ matrix.target }} --publish never
 
       - name: Upload Platform Artifacts
         if: steps.filter.outputs.RUN_JOB == 'true'
