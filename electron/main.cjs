@@ -89,8 +89,8 @@ async function boot() {
     gh.setToken(token);
   }
   gh.setDefaults({
-    owner: settings.owner || process.env.GITHUB_OWNER || env.GITHUB_OWNER || "datanoesiscp",
-    repo: settings.repo || process.env.GITHUB_REPO || env.GITHUB_REPO || "cx-platform-e2e-test-automation-framework",
+    owner: settings.owner || process.env.GITHUB_OWNER || env.GITHUB_OWNER || "",
+    repo: settings.repo || process.env.GITHUB_REPO || env.GITHUB_REPO || "",
   });
 
   const server = await startServer({
