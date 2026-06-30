@@ -36,7 +36,7 @@ permissions:
   contents: write
 
 jobs:
-  # 1. ADIM: Gerekirse Versiyon Yükseltme ve Tag Oluşturma
+  # Step 1: bump the version and create a tag (only when a release type is selected)
   bump-and-tag:
     runs-on: ubuntu-latest
     if: github.event.inputs.version_type != 'none_build_only'
@@ -74,7 +74,7 @@ jobs:
           git push origin main --tags
           echo "tag_name=${{ env.NEW_VER }}" >> $GITHUB_OUTPUT
 
-  # 2. ADIM: Dinamik Matris ile Derleme (Build) İşlemleri
+  # Step 2: build per platform via a dynamic matrix
   compile:
     needs: bump-and-tag
     if: always() && (needs.bump-and-tag.result == 'success' || github.event.inputs.version_type == 'none_build_only')
@@ -91,7 +91,7 @@ jobs:
             platform_key: windows
 
     steps:
-      # Kullanıcının seçmediği platform runner'ını hemen sonlandırır
+      # Immediately end the runner for a platform the user did not select
       - name: Filter Platform
         id: filter
         shell: bash
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.filter.outputs.RUN_JOB == 'true'
         with:
-          # Eğer üst adımda yeni tag oluşturulduysa onu çek, yoksa güncel commit'i kullan
+          # Check out the newly created tag if there is one, otherwise the current commit
           ref: ${{ needs.bump-and-tag.outputs.new_tag || github.ref }}
 
       - uses: actions/setup-node@v4
@@ -116,7 +116,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Canvas kütüphanesinin yerel (native C++) derleme gereksinimleri
+      # Native (C++) build prerequisites for the canvas library
       - name: Install System Dependencies (macOS)
         if: steps.filter.outputs.RUN_JOB == 'true' && matrix.os == 'macos-latest'
         run: brew install pkg-config cairo pango jpeg giflib librsvg pixman
@@ -154,7 +154,7 @@ jobs:
             release/*.blockmap
           if-no-files-found: error
 
-  # 3. ADIM: Çıktıları GitHub Release Üzerinde Toplama
+  # Step 3: collect the outputs into a single GitHub Release
   finalize-release:
     needs: [bump-and-tag, compile]
     runs-on: ubuntu-latest
@@ -186,6 +186,6 @@ jobs:
 
       - name: Post Release Summary
         run: |
-          echo "### 🚀 Dağıtım Süreci Başarıyla Tamamlandı!" >> $GITHUB_STEP_SUMMARY
-          echo "Versiyon: \`${{ needs.bump-and-tag.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "Strateji: \`${{ github.event.inputs.publish_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Release pipeline completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "Version: \`${{ needs.bump-and-tag.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Strategy: \`${{ github.event.inputs.publish_type }}\`" >> $GITHUB_STEP_SUMMARY

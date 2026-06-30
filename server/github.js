@@ -34,10 +34,11 @@ export function getToken() {
 
 /** Update the default owner/repo. */
 export function setDefaults({ owner, repo } = {}) {
-  if (owner != null) {
+  // Ignore empty values so a blank Settings field keeps the current owner/repo.
+  if (owner) {
     config.owner = owner;
   }
-  if (repo != null) {
+  if (repo) {
     config.repo = repo;
   }
 }

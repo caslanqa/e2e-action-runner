@@ -195,15 +195,12 @@ function Sidebar({ view, onView, user, hasToken, repoFullName }) {
 
 // ---- settings view ----------------------------------------------------------
 
-function SettingsView({ coords, status, busy, error, onSave, onClear }) {
+function SettingsView({ status, busy, error, onSave, onClear }) {
+  // Fields start empty by default; the current saved values appear as
+  // placeholders, and a blank field on save means "keep the current value".
   const [token, setToken] = useState("");
-  const [owner, setOwner] = useState(coords.owner);
-  const [repo, setRepo] = useState(coords.repo);
-
-  useEffect(() => {
-    setOwner(coords.owner);
-    setRepo(coords.repo);
-  }, [coords.owner, coords.repo]);
+  const [owner, setOwner] = useState("");
+  const [repo, setRepo] = useState("");
 
   function submit(event) {
     event.preventDefault();
@@ -261,12 +258,22 @@ function SettingsView({ coords, status, busy, error, onSave, onClear }) {
 
         <div className="field">
           <label htmlFor="set-owner">Owner</label>
-          <input id="set-owner" value={owner} onChange={(event) => setOwner(event.target.value)} />
+          <input
+            id="set-owner"
+            value={owner}
+            placeholder={status.owner ? `${status.owner} (current — leave blank to keep)` : "owner (e.g. my-org)"}
+            onChange={(event) => setOwner(event.target.value)}
+          />
         </div>
 
         <div className="field">
           <label htmlFor="set-repo">Repo</label>
-          <input id="set-repo" value={repo} onChange={(event) => setRepo(event.target.value)} />
+          <input
+            id="set-repo"
+            value={repo}
+            placeholder={status.repo ? `${status.repo} (current — leave blank to keep)` : "repository name"}
+            onChange={(event) => setRepo(event.target.value)}
+          />
         </div>
 
         <div className="settings-actions">
@@ -382,7 +389,7 @@ export default function App() {
 
   // Save token/owner/repo from the Settings view, then reconnect on success.
   async function onSaveSettings({ token, owner, repo }) {
-    const repoChanged = owner !== coords.owner || repo !== coords.repo;
+    const repoChanged = (owner && owner !== coords.owner) || (repo && repo !== coords.repo);
     setSavingSettings(true);
     setSettingsError(null);
     try {
@@ -647,7 +654,6 @@ export default function App() {
         {view === "settings" ? (
           <main id="main" tabIndex={-1} className="settings-main">
             <SettingsView
-              coords={coords}
               status={{ hasToken, user, owner: coords.owner, repo: coords.repo }}
               busy={savingSettings}
               error={settingsError}

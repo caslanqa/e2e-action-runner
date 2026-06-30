@@ -24,7 +24,7 @@ Download the installer for your OS from the project's **[Releases](../../release
 
 | OS | Download | First launch (unsigned build, one time only) |
 | --- | --- | --- |
-| macOS (Apple Silicon) | `E2E.Action.Runner-<version>-arm64.dmg` | Open the .dmg, drag the app to **Applications**. If macOS blocks it ("unidentified developer"), **right‑click the app → Open → Open**. |
+| macOS (Apple Silicon) | `E2E.Action.Runner-<version>-arm64.dmg` | Open the .dmg, drag the app to **Applications**. The build is unsigned, so macOS blocks it ("unidentified developer" / "damaged"). Clear the quarantine flag once in Terminal, then open the app: <br>`xattr -cr "/Applications/E2E Action Runner.app"` |
 | Windows | `E2E.Action.Runner.Setup.<version>.exe` | Run it. If SmartScreen warns, click **More info → Run anyway**. |
 
 > macOS builds are currently **Apple Silicon (arm64)** only. On an Intel Mac, ask the
@@ -78,6 +78,7 @@ repo. Saving a new repo reloads its workflows and branches.
 | "Token rejected (invalid or expired)" | The PAT expired or has wrong scopes — create a new one (Actions R/W · Contents R · Metadata R). |
 | Workflows don't load right after the first save | Bring the window to front and approve the one‑time macOS Keychain prompt. |
 | "This artifact has no viewable HTML report" | That artifact is raw data (e.g. allure‑results), not an HTML report — use **Download**. |
+| macOS: "app is damaged / can't be opened" or "unidentified developer" | The build is unsigned. Clear the quarantine flag once, then open it: `xattr -cr "/Applications/E2E Action Runner.app"` |
 | App won't open on an Intel Mac | The current macOS build is Apple Silicon only — request an Intel/universal build. |
 | Report looks too light/dark | The Playwright report follows your system color scheme. |
 
