@@ -1,0 +1,63 @@
+name: Build desktop app
+
+# Builds the macOS (.dmg/.zip) and Windows (.exe) bundles, each on its own native
+# runner — no Wine, no cross-compilation.
+#
+#   - Push a v* tag  -> builds AND publishes a DRAFT GitHub Release with both
+#                       installers attached (review it, then click "Publish").
+#   - Run manually    -> builds and uploads the installers as run artifacts only
+#     (workflow_dispatch)  (no release), so you can test without tagging.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+# Required so electron-builder can create the GitHub Release with the default token.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build
+
+      - name: Package & publish (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npx electron-builder --mac --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package & publish (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npx electron-builder --win --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Always keep the installers as downloadable run artifacts too (handy for
+      # manual builds and as a backup to the release assets).
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-action-runner-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+          if-no-files-found: warn

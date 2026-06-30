@@ -1,0 +1,712 @@
+:root {
+  --bg: #0f1117;
+  --panel: #181b24;
+  --panel-2: #1f2430;
+  --border: #2b3140;
+  --text: #e6e8ee;
+  --muted: #9aa3b2;
+  --accent: #4c8bf5;
+  --success: #3fb950;
+  --failure: #f85149;
+  --running: #d29922;
+  --queued: #8b949e;
+  --neutral: #8b949e;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  margin: 0 0 0.5rem;
+  line-height: 1.2;
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+select {
+  font: inherit;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+}
+
+input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* Visible keyboard focus everywhere (replaces any UA outline removal). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 0;
+  padding: 8px 16px;
+  background: #000;
+  color: #fff;
+  z-index: 100;
+  border-radius: 0 0 8px 0;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ---- app shell + sidebar -------------------------------------------------- */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  flex: 0 0 auto;
+  width: 64px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.5rem;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  transition: width 0.18s ease;
+  z-index: 10;
+}
+
+/* Expand on hover AND on keyboard focus (so it is operable without a mouse). */
+.sidebar:hover,
+.sidebar:focus-within {
+  width: 236px;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
+
+.side-brand {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-align: center;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.side-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 0.6rem 0.65rem;
+  border-radius: 8px;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  font: inherit;
+}
+
+.side-item:hover {
+  background: var(--panel-2);
+}
+
+.side-item.active {
+  background: rgba(76, 139, 245, 0.16);
+  color: #fff;
+}
+
+.side-icon {
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  text-align: center;
+  font-size: 1.05rem;
+}
+
+.side-label {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.sidebar:hover .side-label,
+.sidebar:focus-within .side-label {
+  opacity: 1;
+}
+
+.side-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--running);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.side-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.7rem 0.5rem;
+}
+
+.side-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.65rem;
+}
+
+.side-status {
+  font-size: 0.8rem;
+}
+
+.side-status.ok {
+  color: var(--success);
+}
+
+.side-status.warn {
+  color: var(--running);
+}
+
+.side-user {
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ---- settings view -------------------------------------------------------- */
+
+.settings-main {
+  padding: 1.5rem;
+}
+
+.settings-view {
+  max-width: 680px;
+}
+
+.token-status {
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.token-status.ok {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.token-status.warn {
+  border-color: var(--running);
+  color: var(--running);
+}
+
+.settings-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  margin: 0.5rem 0 1.25rem;
+  font-size: 0.88rem;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.settings-actions .run-button {
+  width: auto;
+}
+
+.linklike {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+/* ---- header --------------------------------------------------------------- */
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.brand h1 {
+  font-size: 1.25rem;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.connection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+
+.coords {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.coords label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.coords input {
+  width: 14rem;
+  max-width: 40vw;
+}
+
+.token-user {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ---- layout --------------------------------------------------------------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  align-items: start;
+}
+
+.report-card {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+/* ---- form ----------------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.required {
+  color: var(--failure);
+}
+
+.inputs {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  margin: 0 0 1rem;
+}
+
+.inputs legend {
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.run-button {
+  width: 100%;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  padding: 0.7rem;
+}
+
+.notice {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.error {
+  margin-top: 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--failure);
+  border-radius: 8px;
+  background: rgba(248, 81, 73, 0.12);
+  color: #ffb4ae;
+  font-size: 0.85rem;
+}
+
+/* ---- status --------------------------------------------------------------- */
+
+.empty {
+  color: var(--muted);
+}
+
+.status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ghost {
+  background: transparent;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.recent {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+}
+
+.recent-title {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.recent-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.recent-run {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  background: var(--panel-2);
+}
+
+.recent-run.selected {
+  border-color: var(--accent);
+  background: rgba(76, 139, 245, 0.12);
+}
+
+.rr-num {
+  font-weight: 600;
+}
+
+.rr-branch {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rr-time {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.run-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.run-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.gh-link {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.badge-symbol {
+  font-size: 0.9rem;
+}
+
+.badge-success { color: var(--success); border-color: var(--success); }
+.badge-failure { color: var(--failure); border-color: var(--failure); }
+.badge-running { color: var(--running); border-color: var(--running); }
+.badge-queued  { color: var(--queued); }
+.badge-neutral { color: var(--neutral); }
+
+.jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.job {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--panel-2);
+}
+
+.job-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.job-name {
+  font-weight: 600;
+}
+
+.steps {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0 0 0 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.step-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--queued);
+  flex: 0 0 auto;
+}
+
+.step-success { background: var(--success); }
+.step-failure { background: var(--failure); }
+.step-running { background: var(--running); }
+.step-neutral { background: var(--neutral); }
+
+/* ---- artifacts ------------------------------------------------------------ */
+
+.artifacts {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.artifacts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.artifact {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.artifact-name {
+  font-weight: 600;
+}
+
+.artifact-size {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.artifact-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.artifact-dl {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.spinner {
+  width: 0.85em;
+  height: 0.85em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+/* Spin only when the user hasn't asked for reduced motion; otherwise the ring
+   stays a static (but still visible) indicator alongside the "Downloading…" text. */
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: spin 0.6s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- report --------------------------------------------------------------- */
+
+.report-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.report-frame {
+  width: 100%;
+  height: 75vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Hint the embedded report toward a dark scheme; it ultimately follows its
+     own color-scheme + the browser's prefers-color-scheme. */
+  color-scheme: dark light;
+  background: var(--panel-2);
+}

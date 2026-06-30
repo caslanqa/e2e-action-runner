@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+.env
+.e2e-runner-store.json
+*.log
+.DS_Store
