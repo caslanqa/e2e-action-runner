@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install System Dependencies (macOS)
@@ -73,10 +73,10 @@ jobs:
         with:
           name: electron-builders-mac
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/latest*.yml
-            dist/*.blockmap
+            release/*.dmg
+            release/*.zip
+            release/latest*.yml
+            release/*.blockmap
           if-no-files-found: error
 
   # Windows Derleme İşi
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install Node Dependencies
@@ -112,7 +112,7 @@ jobs:
         with:
           name: electron-builders-win
           path: |
-            dist/*.exe
-            dist/latest*.yml
-            dist/*.blockmap
+            release/*.exe
+            release/latest*.yml
+            release/*.blockmap
           if-no-files-found: error

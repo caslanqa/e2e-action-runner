@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Configure Git
@@ -152,11 +152,11 @@ jobs:
         with:
           name: electron-dist-${{ matrix.target }}
           path: |
-            dist/*.dmg
-            dist/*.exe
-            dist/*.zip
-            dist/latest*.yml
-            dist/*.blockmap
+            release/*.dmg
+            release/*.exe
+            release/*.zip
+            release/latest*.yml
+            release/*.blockmap
           if-no-files-found: error
 
   # 3. ADIM: Çıktıları GitHub Release Üzerinde Toplama
