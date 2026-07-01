@@ -88,6 +88,31 @@ export function createBitbucketAdapter({ email, token } = {}) {
     return res.json();
   }
 
+  // Follow Bitbucket's `next` pagination and collect all values (capped).
+  async function bbAll(path) {
+    let url = path.startsWith("http") ? path : `${BASE}${path}`;
+    const out = [];
+    for (let page = 0; url && page < 20; page++) {
+      const res = await fetch(url, { headers: { Authorization: authHeader, Accept: "application/json" } });
+      if (!res.ok) {
+        let message = `Bitbucket request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          message = data?.error?.message ?? message;
+        } catch {
+          /* keep default */
+        }
+        const error = new Error(message);
+        error.status = res.status;
+        throw error;
+      }
+      const data = await res.json();
+      out.push(...(data.values ?? []));
+      url = data.next || null;
+    }
+    return out;
+  }
+
   async function bbText(path) {
     const res = await fetch(`${BASE}${path}`, { headers: { Authorization: authHeader } });
     if (res.status === 404) {
@@ -151,20 +176,40 @@ export function createBitbucketAdapter({ email, token } = {}) {
     },
 
     async validate() {
-      const user = await bb("/user");
-      return { login: user.display_name || user.nickname || user.username || "bitbucket" };
+      // Prefer /user for a friendly name, but it needs the read:user:bitbucket
+      // scope. If that scope wasn't granted, fall back to a repository-scope
+      // check so the connection still works with just repo + pipeline scopes.
+      try {
+        const user = await bb("/user");
+        return { login: user.display_name || user.nickname || user.username || email || "bitbucket" };
+      } catch (err) {
+        if (err.status === 401 || err.status === 403) {
+          await bb("/repositories?role=member&pagelen=1");
+          return { login: email || "bitbucket" };
+        }
+        throw err;
+      }
     },
 
     async listRepos() {
-      const data = await bb("/repositories?role=member&pagelen=100&sort=-updated_on");
-      return (data.values ?? []).map((r) => ({
-        id: r.full_name,
-        fullName: r.full_name,
-        workspace: r.workspace?.slug ?? r.full_name.split("/")[0],
-        slug: r.slug,
-        private: r.is_private,
-        defaultBranch: r.mainbranch?.name,
-      }));
+      // Enumerate the user's workspaces, then repos in each — matches what the
+      // user sees in Bitbucket. (role=member misses repos granted via groups.)
+      const workspaces = await bbAll("/workspaces?pagelen=100");
+      const repos = [];
+      for (const ws of workspaces) {
+        const wsRepos = await bbAll(`/repositories/${ws.slug}?pagelen=100&sort=-updated_on`);
+        for (const r of wsRepos) {
+          repos.push({
+            id: r.full_name,
+            fullName: r.full_name,
+            workspace: r.workspace?.slug ?? ws.slug,
+            slug: r.slug,
+            private: r.is_private,
+            defaultBranch: r.mainbranch?.name,
+          });
+        }
+      }
+      return repos;
     },
 
     async getRepoMeta() {

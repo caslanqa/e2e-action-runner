@@ -223,8 +223,8 @@ const PROVIDER_HELP = {
       { name: "email", label: "Atlassian email", type: "email", placeholder: "you@example.com" },
       { name: "token", label: "API token", type: "password", placeholder: "ATATT…" },
     ],
-    hint: "Atlassian API token (Basic auth: your email + the token) with Pipelines read/write. App passwords are deprecated.",
-    links: [{ href: "https://id.atlassian.com/manage-profile/security/api-tokens", label: "Create API token ↗" }],
+    hint: "Atlassian 'API token with scopes' (use your email + the token). Bitbucket scopes: read:repository:bitbucket, read:pipeline:bitbucket, write:pipeline:bitbucket, read:workspace:bitbucket (read:user:bitbucket optional — for your display name). App passwords are deprecated.",
+    links: [{ href: "https://id.atlassian.com/manage-profile/security/api-tokens", label: "Create API token with scopes ↗" }],
   },
 };
 
@@ -452,7 +452,10 @@ export default function App() {
     api
       .repos()
       .then(setRepos)
-      .catch(() => setRepos([]))
+      .catch((err) => {
+        setRepos([]);
+        setError(`Could not load repositories: ${err.message}`);
+      })
       .finally(() => setLoadingRepos(false));
   }
 
