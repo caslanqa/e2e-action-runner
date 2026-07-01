@@ -199,19 +199,64 @@ function Sidebar({ view, onView, user, hasToken, connectionCount, repoFullName }
 
 const PROVIDERS = [
   { value: "github", label: "GitHub", enabled: true },
-  { value: "gitlab", label: "GitLab (coming soon)", enabled: false },
-  { value: "bitbucket", label: "Bitbucket (coming soon)", enabled: false },
+  { value: "gitlab", label: "GitLab", enabled: true },
+  { value: "bitbucket", label: "Bitbucket", enabled: true },
 ];
+
+// Each provider declares its own credential fields so the form adapts.
+const PROVIDER_HELP = {
+  github: {
+    fields: [{ name: "token", label: "GitHub token (PAT)", type: "password", placeholder: "github_pat_… or ghp_…" }],
+    hint: "Fine-grained PAT with Actions (Read & write), Contents (Read), Metadata (Read) on the repos you'll use.",
+    links: [
+      { href: "https://github.com/settings/personal-access-tokens/new", label: "Create fine-grained PAT ↗" },
+      { href: "https://github.com/settings/personal-access-tokens", label: "Manage PATs ↗" },
+    ],
+  },
+  gitlab: {
+    fields: [{ name: "token", label: "GitLab token (PAT)", type: "password", placeholder: "glpat-…" }],
+    hint: "Personal Access Token with the 'api' scope on the projects you'll use.",
+    links: [{ href: "https://gitlab.com/-/user_settings/personal_access_tokens", label: "Create GitLab PAT ↗" }],
+  },
+  bitbucket: {
+    fields: [
+      { name: "email", label: "Atlassian email", type: "email", placeholder: "you@example.com" },
+      { name: "token", label: "API token", type: "password", placeholder: "ATATT…" },
+    ],
+    hint: "Atlassian API token (Basic auth: your email + the token) with Pipelines read/write. App passwords are deprecated.",
+    links: [{ href: "https://id.atlassian.com/manage-profile/security/api-tokens", label: "Create API token ↗" }],
+  },
+};
+
+function providerIcon(provider) {
+  if (provider === "github") {
+    return "🐙";
+  }
+  if (provider === "gitlab") {
+    return "🦊";
+  }
+  if (provider === "bitbucket") {
+    return "🪣";
+  }
+  return "•";
+}
 
 function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate, onRemove }) {
   const [provider, setProvider] = useState("github");
-  const [token, setToken] = useState("");
+  const [creds, setCreds] = useState({});
   const [label, setLabel] = useState("");
+  const help = PROVIDER_HELP[provider] ?? PROVIDER_HELP.github;
+  const complete = help.fields.every((field) => (creds[field.name] ?? "").trim());
+
+  function changeProvider(value) {
+    setProvider(value);
+    setCreds({});
+  }
 
   function submit(event) {
     event.preventDefault();
-    onAdd({ provider, token, label });
-    setToken("");
+    onAdd({ provider, label, ...creds });
+    setCreds({});
     setLabel("");
   }
 
@@ -227,7 +272,7 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
         <ul className="conn-list" aria-label="Saved connections">
           {connections.map((connection) => (
             <li key={connection.id} className={`conn-item ${connection.id === activeId ? "active" : ""}`}>
-              <span className="conn-provider" aria-hidden="true">{connection.provider === "github" ? "🐙" : "•"}</span>
+              <span className="conn-provider" aria-hidden="true">{providerIcon(connection.provider)}</span>
               <span className="conn-main">
                 <span className="conn-label">{connection.label}</span>
                 <span className="conn-sub">
@@ -263,7 +308,7 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
 
         <div className="field">
           <label htmlFor="conn-provider">Service provider</label>
-          <select id="conn-provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+          <select id="conn-provider" value={provider} onChange={(event) => changeProvider(event.target.value)}>
             {PROVIDERS.map((option) => (
               <option key={option.value} value={option.value} disabled={!option.enabled}>
                 {option.label}
@@ -272,20 +317,20 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
           </select>
         </div>
 
-        <div className="field">
-          <label htmlFor="conn-token">GitHub token (PAT)</label>
-          <input
-            id="conn-token"
-            type="password"
-            autoComplete="off"
-            value={token}
-            placeholder="github_pat_… or ghp_…"
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <p className="field-hint">
-            Fine-grained PAT with Actions (Read &amp; write), Contents (Read), Metadata (Read) on the repos you'll use.
-          </p>
-        </div>
+        {help.fields.map((field) => (
+          <div className="field" key={field.name}>
+            <label htmlFor={`conn-${field.name}`}>{field.label}</label>
+            <input
+              id={`conn-${field.name}`}
+              type={field.type}
+              autoComplete="off"
+              value={creds[field.name] ?? ""}
+              placeholder={field.placeholder}
+              onChange={(event) => setCreds((current) => ({ ...current, [field.name]: event.target.value }))}
+            />
+          </div>
+        ))}
+        <p className="field-hint">{help.hint}</p>
 
         <div className="field">
           <label htmlFor="conn-label">Label (optional)</label>
@@ -298,16 +343,15 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
         </div>
 
         <div className="settings-links">
-          <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
-            Create new fine-grained PAT ↗
-          </a>
-          <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noreferrer">
-            Manage PATs ↗
-          </a>
+          {help.links.map((link) => (
+            <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
+              {link.label}
+            </a>
+          ))}
         </div>
 
         <div className="settings-actions">
-          <button type="submit" className="run-button" disabled={busy || !token.trim()}>
+          <button type="submit" className="run-button" disabled={busy || !complete}>
             {busy ? "Adding…" : "Add connection"}
           </button>
         </div>
@@ -321,7 +365,7 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
 // ---- main app ---------------------------------------------------------------
 
 export default function App() {
-  const [coords, setCoords] = useState({ owner: "", repo: "" });
+  const [activeRepo, setActiveRepo] = useState(null);
   const [user, setUser] = useState(null);
   const [hasToken, setHasToken] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -340,6 +384,7 @@ export default function App() {
   const [formValues, setFormValues] = useState({});
 
   const [dispatching, setDispatching] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [run, setRun] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [artifacts, setArtifacts] = useState([]);
@@ -363,7 +408,7 @@ export default function App() {
       .then((cfg) => {
         setConnections(cfg.connections ?? []);
         setActiveId(cfg.activeId ?? null);
-        setCoords(cfg.activeRepo ?? { owner: "", repo: "" });
+        setActiveRepo(cfg.activeRepo?.fullName ? cfg.activeRepo : null);
         setHasToken(Boolean(cfg.hasActiveToken));
         setUser(cfg.user ?? cfg.active?.login ?? null);
         if (!cfg.activeId) {
@@ -371,8 +416,8 @@ export default function App() {
           return;
         }
         loadReposList();
-        if (cfg.activeRepo?.owner && cfg.activeRepo?.repo) {
-          loadRepo(cfg.activeRepo);
+        if (cfg.activeRepo?.fullName) {
+          loadRepo();
         }
       })
       .catch((err) => setError(err.message));
@@ -382,7 +427,7 @@ export default function App() {
   function applyState(state) {
     setConnections(state.connections ?? []);
     setActiveId(state.activeId ?? null);
-    setCoords(state.activeRepo ?? { owner: "", repo: "" });
+    setActiveRepo(state.activeRepo?.fullName ? state.activeRepo : null);
     setHasToken(Boolean(state.hasActiveToken));
     const active = (state.connections ?? []).find((c) => c.id === state.activeId);
     setUser(active?.login ?? null);
@@ -411,14 +456,12 @@ export default function App() {
       .finally(() => setLoadingRepos(false));
   }
 
-  async function loadRepo(target) {
+  // The backend operates on the active connection's selected repo, so no
+  // owner/repo needs to be passed — it's set server-side via /api/active-repo.
+  async function loadRepo() {
     setError(null);
     try {
-      const [wfList, branchList, meta] = await Promise.all([
-        api.workflows(target),
-        api.branches(target),
-        api.meta(target),
-      ]);
+      const [wfList, branchList, meta] = await Promise.all([api.workflows(), api.branches(), api.meta()]);
       setWorkflows(wfList);
       setBranches(branchList);
       setRef((current) => current || meta.defaultBranch || branchList[0] || "");
@@ -436,7 +479,7 @@ export default function App() {
       return;
     }
     api
-      .workflowRuns(workflowId, coords)
+      .workflowRuns(workflowId)
       .then(setRecentRuns)
       .catch(() => {});
   }
@@ -456,11 +499,11 @@ export default function App() {
 
   // ---- connection actions ----
 
-  async function onAddConnection({ provider, token, label }) {
+  async function onAddConnection(payload) {
     setSavingConn(true);
     setConnError(null);
     try {
-      const state = await api.addConnection({ provider, token, label });
+      const state = await api.addConnection(payload);
       applyState(state);
       resetDashboard();
       loadReposList();
@@ -480,8 +523,8 @@ export default function App() {
       applyState(state);
       resetDashboard();
       loadReposList();
-      if (state.activeRepo?.owner && state.activeRepo?.repo) {
-        await loadRepo(state.activeRepo);
+      if (state.activeRepo?.fullName) {
+        await loadRepo();
       }
     } catch (err) {
       setConnError(err.message);
@@ -497,8 +540,8 @@ export default function App() {
       resetDashboard();
       if (state.activeId) {
         loadReposList();
-        if (state.activeRepo?.owner && state.activeRepo?.repo) {
-          await loadRepo(state.activeRepo);
+        if (state.activeRepo?.fullName) {
+          await loadRepo();
         }
       } else {
         setRepos([]);
@@ -509,28 +552,27 @@ export default function App() {
     }
   }
 
-  // Pick which repo the active connection operates on.
-  async function selectRepo(owner, repo) {
+  // Pick which repo the active connection operates on. `descriptor` is the full
+  // repo object from /api/repos (provider-specific fields), stored server-side.
+  async function selectRepo(descriptor) {
     setError(null);
     resetDashboard();
     try {
-      const state = await api.setActiveRepo({ owner, repo });
+      const state = await api.setActiveRepo(descriptor);
       applyState(state);
-      await loadRepo({ owner, repo });
+      await loadRepo();
     } catch (err) {
       setError(err.message);
     }
   }
 
   function onRepoSelect(fullName) {
-    if (!fullName) {
+    if (!fullName || fullName === activeRepo?.fullName) {
       return;
     }
-    const slash = fullName.indexOf("/");
-    const owner = fullName.slice(0, slash);
-    const repo = fullName.slice(slash + 1);
-    if (owner !== coords.owner || repo !== coords.repo) {
-      selectRepo(owner, repo);
+    const match = repos.find((r) => r.fullName === fullName);
+    if (match) {
+      selectRepo(match);
     }
   }
 
@@ -542,7 +584,7 @@ export default function App() {
     }
     let cancelled = false;
     api
-      .inputs(selectedWorkflowId, ref, coords)
+      .inputs(selectedWorkflowId, ref)
       .then((schema) => {
         if (!cancelled) {
           setInputsSchema(schema);
@@ -589,7 +631,7 @@ export default function App() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const [latestRun, latestJobs] = await Promise.all([api.run(run.id, coords), api.jobs(run.id, coords)]);
+        const [latestRun, latestJobs] = await Promise.all([api.run(run.id), api.jobs(run.id)]);
         if (cancelled) {
           return;
         }
@@ -618,7 +660,7 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const [latestJobs, arts] = await Promise.all([api.jobs(run.id, coords), api.artifacts(run.id, coords)]);
+        const [latestJobs, arts] = await Promise.all([api.jobs(run.id), api.artifacts(run.id)]);
         if (cancelled) {
           return;
         }
@@ -686,7 +728,7 @@ export default function App() {
     setReportNote(null);
     setSelectedArtifactId(null);
     try {
-      const { runId, htmlUrl } = await api.dispatch(selectedWorkflowId, { ref, inputs }, coords);
+      const { runId, htmlUrl } = await api.dispatch(selectedWorkflowId, { ref, inputs });
       setRun({ id: runId, htmlUrl, status: "queued", conclusion: null, createdAt: new Date().toISOString() });
       loadRecentRuns(selectedWorkflowId);
     } catch (err) {
@@ -698,13 +740,24 @@ export default function App() {
 
   function downloadHref(artifactId, name) {
     const params = new URLSearchParams({ name });
-    if (coords.owner) {
-      params.set("owner", coords.owner);
-    }
-    if (coords.repo) {
-      params.set("repo", coords.repo);
-    }
     return `/api/runs/${run.id}/artifacts/${artifactId}/download?${params.toString()}`;
+  }
+
+  // Cancel/stop the active run. The polling effect picks up the "cancelled"
+  // status shortly after, so we don't optimistically mutate the run here.
+  async function onCancelRun() {
+    if (!run?.id) {
+      return;
+    }
+    setCanceling(true);
+    setError(null);
+    try {
+      await api.cancelRun(run.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCanceling(false);
+    }
   }
 
   async function onViewReport(artifactId) {
@@ -715,7 +768,7 @@ export default function App() {
     setError(null);
     setReportNote(null);
     try {
-      const { url, hasReport } = await api.report(run.id, artifactId, coords);
+      const { url, hasReport } = await api.report(run.id, artifactId);
       if (hasReport && url) {
         setReportUrl(url);
       } else {
@@ -730,8 +783,8 @@ export default function App() {
   }
 
   const isActive = run && run.status !== "completed";
-  const hasRepo = Boolean(coords.owner && coords.repo);
-  const currentRepoFull = hasRepo ? `${coords.owner}/${coords.repo}` : "";
+  const hasRepo = Boolean(activeRepo?.fullName);
+  const currentRepoFull = activeRepo?.fullName ?? "";
   // Keep the current repo selectable even if it isn't in the fetched list.
   const repoOptions =
     currentRepoFull && !repos.some((r) => r.fullName === currentRepoFull)
@@ -750,7 +803,7 @@ export default function App() {
         user={user}
         hasToken={hasToken}
         connectionCount={connections.length}
-        repoFullName={hasRepo ? `${coords.owner}/${coords.repo}` : ""}
+        repoFullName={currentRepoFull}
       />
       <div className="app-body">
         {view === "connections" ? (
@@ -771,7 +824,7 @@ export default function App() {
               <div className="brand">
                 <h1>E2E Action Runner</h1>
                 <p className="subtitle">
-                  {hasRepo ? `${coords.owner}/${coords.repo}` : hasToken ? "Pick a repository below" : "Add a connection to start"}
+                  {hasRepo ? currentRepoFull : hasToken ? "Pick a repository below" : "Add a connection to start"}
                 </p>
               </div>
               <p className="token-user">
@@ -958,6 +1011,11 @@ export default function App() {
                     Open on GitHub ↗
                   </a>
                 ) : null}
+                {isActive ? (
+                  <button type="button" className="ghost stop-run" onClick={onCancelRun} disabled={canceling}>
+                    {canceling ? "Stopping…" : "⊘ Stop run"}
+                  </button>
+                ) : null}
               </div>
 
               <ol className="jobs">
@@ -988,37 +1046,44 @@ export default function App() {
                     <p className="field-hint">No artifacts on this run.</p>
                   ) : (
                     <ul>
-                      {visibleArtifacts.map((artifact) => (
-                        <li key={artifact.id} className="artifact">
-                          <span className="artifact-name">{artifact.name}</span>
-                          <span className="artifact-size">{formatBytes(artifact.sizeInBytes)}</span>
-                          <span className="artifact-actions">
-                            {artifact.expired ? null : (
-                              <a className="artifact-dl" href={downloadHref(artifact.id, artifact.name)}>
-                                Download
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => onViewReport(artifact.id)}
-                              disabled={artifact.expired || loadingReport}
-                              aria-pressed={selectedArtifactId === artifact.id}
-                              aria-busy={loadingReport && selectedArtifactId === artifact.id}
-                            >
+                      {visibleArtifacts.map((artifact) => {
+                        // Only offer "View report" for artifacts that look like a
+                        // browsable report; everything else just gets Download.
+                        const isReport = /report/i.test(artifact.name);
+                        return (
+                          <li key={artifact.id} className="artifact">
+                            <span className="artifact-name">{artifact.name}</span>
+                            <span className="artifact-size">{formatBytes(artifact.sizeInBytes)}</span>
+                            <span className="artifact-actions">
                               {artifact.expired ? (
-                                "Expired"
-                              ) : loadingReport && selectedArtifactId === artifact.id ? (
-                                <span className="btn-loading">
-                                  <span className="spinner" aria-hidden="true" />
-                                  Downloading…
-                                </span>
+                                <span className="artifact-dl">Expired</span>
                               ) : (
-                                "View report"
+                                <a className="artifact-dl" href={downloadHref(artifact.id, artifact.name)}>
+                                  Download
+                                </a>
                               )}
-                            </button>
-                          </span>
-                        </li>
-                      ))}
+                              {isReport && !artifact.expired ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onViewReport(artifact.id)}
+                                  disabled={loadingReport}
+                                  aria-pressed={selectedArtifactId === artifact.id}
+                                  aria-busy={loadingReport && selectedArtifactId === artifact.id}
+                                >
+                                  {loadingReport && selectedArtifactId === artifact.id ? (
+                                    <span className="btn-loading">
+                                      <span className="spinner" aria-hidden="true" />
+                                      Downloading…
+                                    </span>
+                                  ) : (
+                                    "View report"
+                                  )}
+                                </button>
+                              ) : null}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                   {reportNote ? <p className="notice" role="status">{reportNote}</p> : null}

@@ -5,7 +5,6 @@ import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 
 import * as connections from "./connections.js";
-import * as gh from "./github.js";
 import { extractReport, reportsRoot } from "./report.js";
 
 /**
@@ -39,33 +38,22 @@ export async function createApp({ serveStaticDir = null, logger = true } = {}) {
     });
   }
 
-  // Resolve owner/repo from the query string, falling back to the defaults.
-  function coords(request) {
-    return {
-      owner: request.query?.owner || gh.config.owner,
-      repo: request.query?.repo || gh.config.repo,
-    };
-  }
-
   app.get("/api/config", async () => {
-    const user = await gh.getAuthUser().catch(() => null);
-    return { ...connections.getState(), user };
+    const state = connections.getState();
+    return { ...state, user: state.active?.login ?? null };
   });
 
-  // ---- connection management (multi-account) ----
+  // ---- connection management (multi-account, multi-provider) ----
 
   app.get("/api/connections", async () => {
     return connections.getState();
   });
 
   app.post("/api/connections", async (request) => {
-    const { provider = "github", token, label } = request.body ?? {};
-    if (provider !== "github") {
-      const error = new Error(`Provider "${provider}" is not supported yet.`);
-      error.status = 400;
-      throw error;
-    }
-    return connections.addGitHub(token, label);
+    // Everything except provider/label is provider-specific credentials
+    // (github: { token }; gitlab/bitbucket will add their own fields).
+    const { provider = "github", label, ...credentials } = request.body ?? {};
+    return connections.addConnection(provider, credentials, label);
   });
 
   app.delete("/api/connections/:id", async (request) => {
@@ -78,71 +66,63 @@ export async function createApp({ serveStaticDir = null, logger = true } = {}) {
 
   // Repositories available to the active connection (for the repo picker).
   app.get("/api/repos", async () => {
-    return gh.listRepos();
+    return connections.active().listRepos();
   });
 
-  // Select which repo the active connection operates on.
+  // Select which repo the active connection operates on (full descriptor).
   app.post("/api/active-repo", async (request) => {
-    const { owner, repo } = request.body ?? {};
-    return connections.setActiveRepo(owner, repo);
+    return connections.setActiveRepo(request.body ?? null);
   });
 
-  app.get("/api/meta", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.getRepoMeta(owner, repo);
+  app.get("/api/meta", async () => {
+    return connections.active().getRepoMeta();
   });
 
-  app.get("/api/workflows", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.listWorkflows(owner, repo);
+  app.get("/api/workflows", async () => {
+    return connections.active().listWorkflows();
   });
 
-  app.get("/api/branches", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.listBranches(owner, repo);
+  app.get("/api/branches", async () => {
+    return connections.active().listBranches();
   });
 
   app.get("/api/workflows/:id/inputs", async (request) => {
-    const { owner, repo } = coords(request);
-    const ref = request.query?.ref;
-    return gh.getWorkflowInputs(request.params.id, ref, owner, repo);
+    return connections.active().getWorkflowInputs(request.params.id, request.query?.ref);
   });
 
   app.get("/api/workflows/:id/runs", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.listWorkflowRuns(request.params.id, owner, repo);
+    return connections.active().listRuns(request.params.id);
   });
 
   app.post("/api/workflows/:id/dispatch", async (request) => {
-    const { owner, repo } = coords(request);
     const { ref, inputs } = request.body ?? {};
     if (!ref) {
-      const error = new Error("A git ref (branch) is required to dispatch the workflow.");
+      const error = new Error("A git ref (branch) is required to run the workflow.");
       error.status = 400;
       throw error;
     }
-    return gh.dispatchAndResolve(request.params.id, ref, inputs ?? {}, owner, repo);
+    return connections.active().dispatch(request.params.id, ref, inputs ?? {});
   });
 
   app.get("/api/runs/:id", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.getRun(request.params.id, owner, repo);
+    return connections.active().getRun(request.params.id);
+  });
+
+  app.post("/api/runs/:id/cancel", async (request) => {
+    return connections.active().cancelRun(request.params.id);
   });
 
   app.get("/api/runs/:id/jobs", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.getRunJobs(request.params.id, owner, repo);
+    return connections.active().getRunJobs(request.params.id);
   });
 
   app.get("/api/runs/:id/artifacts", async (request) => {
-    const { owner, repo } = coords(request);
-    return gh.listRunArtifacts(request.params.id, owner, repo);
+    return connections.active().listArtifacts(request.params.id);
   });
 
   app.get("/api/runs/:runId/artifacts/:artifactId/report", async (request) => {
-    const { owner, repo } = coords(request);
     const { runId, artifactId } = request.params;
-    const buffer = await gh.downloadArtifactZip(artifactId, owner, repo);
+    const buffer = await connections.active().downloadArtifact(artifactId);
     const relative = extractReport(buffer, runId, artifactId);
     if (!relative) {
       return { hasReport: false, url: null };
@@ -151,10 +131,9 @@ export async function createApp({ serveStaticDir = null, logger = true } = {}) {
   });
 
   app.get("/api/runs/:runId/artifacts/:artifactId/download", async (request, reply) => {
-    const { owner, repo } = coords(request);
     const { artifactId } = request.params;
     const safeName = String(request.query?.name ?? `artifact-${artifactId}`).replace(/["\\/]/g, "");
-    const buffer = await gh.downloadArtifactZip(artifactId, owner, repo);
+    const buffer = await connections.active().downloadArtifact(artifactId);
     reply.header("Content-Type", "application/zip");
     reply.header("Content-Disposition", `attachment; filename="${safeName}.zip"`);
     return reply.send(buffer);

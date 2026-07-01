@@ -28,9 +28,18 @@ function saveStore(data) {
   }
 }
 
+// Older stores kept a { id: "token" } map; connections now use { id: { token } }.
+function normalizeCreds(raw) {
+  const out = {};
+  for (const [id, value] of Object.entries(raw || {})) {
+    out[id] = typeof value === "string" ? { token: value } : value;
+  }
+  return out;
+}
+
 const stored = loadStore();
 let conns = Array.isArray(stored.connections) ? stored.connections : [];
-let tokens = stored.tokens ?? {};
+let creds = normalizeCreds(stored.creds ?? stored.tokens ?? {});
 let activeId = stored.activeId ?? null;
 let repos = stored.repos ?? {};
 
@@ -38,14 +47,15 @@ let repos = stored.repos ?? {};
 if (conns.length === 0 && process.env.GITHUB_TOKEN) {
   const id = "conn_env";
   conns = [{ id, provider: "github", label: "default", login: "" }];
-  tokens = { [id]: process.env.GITHUB_TOKEN };
+  creds = { [id]: { token: process.env.GITHUB_TOKEN } };
   activeId = id;
   if (process.env.GITHUB_OWNER && process.env.GITHUB_REPO) {
-    repos = { [id]: { owner: process.env.GITHUB_OWNER, repo: process.env.GITHUB_REPO } };
+    const fullName = `${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}`;
+    repos = { [id]: { owner: process.env.GITHUB_OWNER, repo: process.env.GITHUB_REPO, fullName } };
   }
 }
 
-connections.init({ connections: conns, tokens, activeId, repos }, saveStore);
+connections.init({ connections: conns, creds, activeId, repos }, saveStore);
 
 const port = Number(process.env.PORT ?? 5179);
 

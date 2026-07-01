@@ -47,6 +47,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   run: (runId, coords) => http(`/api/runs/${runId}${qs(coords)}`),
+  cancelRun: (runId) => jsonPost(`/api/runs/${runId}/cancel`),
   jobs: (runId, coords) => http(`/api/runs/${runId}/jobs${qs(coords)}`),
   artifacts: (runId, coords) => http(`/api/runs/${runId}/artifacts${qs(coords)}`),
   report: (runId, artifactId, coords) =>

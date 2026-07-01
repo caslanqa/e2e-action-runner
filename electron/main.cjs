@@ -9,8 +9,17 @@ function userFile(name) {
   return path.join(app.getPath("userData"), name);
 }
 
-// Connection metadata (non-secret) is plaintext JSON; tokens are stored in a
-// separate keychain-encrypted blob.
+// Older stores kept a { id: "token" } map; connections now use { id: { token } }.
+function normalizeCreds(raw) {
+  const out = {};
+  for (const [id, value] of Object.entries(raw || {})) {
+    out[id] = typeof value === "string" ? { token: value } : value;
+  }
+  return out;
+}
+
+// Connection metadata (non-secret) is plaintext JSON; per-connection credentials
+// are stored in a separate keychain-encrypted blob.
 function loadConnections() {
   let meta = {};
   try {
@@ -18,34 +27,34 @@ function loadConnections() {
   } catch {
     meta = {};
   }
-  let tokens = {};
+  let creds = {};
   try {
     const buffer = fs.readFileSync(userFile("tokens.enc"));
     const json = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buffer) : buffer.toString("utf8");
-    tokens = JSON.parse(json);
+    creds = normalizeCreds(JSON.parse(json));
   } catch {
-    tokens = {};
+    creds = {};
   }
   return {
     connections: Array.isArray(meta.connections) ? meta.connections : [],
     activeId: meta.activeId ?? null,
     repos: meta.repos ?? {},
-    tokens,
+    creds,
   };
 }
 
-function saveConnections({ connections, activeId, repos, tokens }) {
+function saveConnections({ connections, activeId, repos, creds }) {
   try {
     fs.writeFileSync(userFile("connections.json"), JSON.stringify({ connections, activeId, repos }, null, 2));
   } catch (error) {
     console.warn("Could not save connections:", error.message);
   }
   try {
-    const json = JSON.stringify(tokens ?? {});
+    const json = JSON.stringify(creds ?? {});
     const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(json) : Buffer.from(json, "utf8");
     fs.writeFileSync(userFile("tokens.enc"), data);
   } catch (error) {
-    console.warn("Could not save tokens:", error.message);
+    console.warn("Could not save credentials:", error.message);
   }
 }
 
@@ -92,12 +101,12 @@ async function boot() {
     if (legacy) {
       const id = "conn_1";
       loaded.connections = [{ id, provider: "github", label: "default", login: "" }];
-      loaded.tokens = { [id]: legacy };
+      loaded.creds = { [id]: { token: legacy } };
       loaded.activeId = id;
       const owner = env.GITHUB_OWNER || process.env.GITHUB_OWNER;
       const repo = env.GITHUB_REPO || process.env.GITHUB_REPO;
       if (owner && repo) {
-        loaded.repos = { [id]: { owner, repo } };
+        loaded.repos = { [id]: { owner, repo, fullName: `${owner}/${repo}` } };
       }
     }
   }
