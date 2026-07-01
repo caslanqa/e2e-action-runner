@@ -179,5 +179,11 @@ export function createGitHubAdapter({ token } = {}) {
       const res = await octokit.rest.actions.downloadArtifact({ owner, repo: name, artifact_id: artifactId, archive_format: "zip" });
       return Buffer.from(res.data);
     },
+
+    async cancelRun(runId) {
+      const { owner, repo: name } = need();
+      await octokit.rest.actions.cancelWorkflowRun({ owner, repo: name, run_id: runId });
+      return { ok: true };
+    },
   };
 }

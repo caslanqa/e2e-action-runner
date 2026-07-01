@@ -267,5 +267,10 @@ export function createGitLabAdapter({ token } = {}) {
     async downloadArtifact(jobId) {
       return requestBinary(`/projects/${need().id}/jobs/${jobId}/artifacts`);
     },
+
+    async cancelRun(runId) {
+      await request(`/projects/${need().id}/pipelines/${runId}/cancel`, { method: "POST" });
+      return { ok: true };
+    },
   };
 }

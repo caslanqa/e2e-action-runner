@@ -530,6 +530,16 @@ input[type="checkbox"] {
   padding: 0.3rem 0.6rem;
 }
 
+.stop-run {
+  color: var(--failure);
+  border-color: var(--failure);
+}
+
+.stop-run:hover:not(:disabled) {
+  border-color: var(--failure);
+  background: rgba(248, 81, 73, 0.12);
+}
+
 .recent {
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);

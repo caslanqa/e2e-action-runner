@@ -384,6 +384,7 @@ export default function App() {
   const [formValues, setFormValues] = useState({});
 
   const [dispatching, setDispatching] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [run, setRun] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [artifacts, setArtifacts] = useState([]);
@@ -742,6 +743,23 @@ export default function App() {
     return `/api/runs/${run.id}/artifacts/${artifactId}/download?${params.toString()}`;
   }
 
+  // Cancel/stop the active run. The polling effect picks up the "cancelled"
+  // status shortly after, so we don't optimistically mutate the run here.
+  async function onCancelRun() {
+    if (!run?.id) {
+      return;
+    }
+    setCanceling(true);
+    setError(null);
+    try {
+      await api.cancelRun(run.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCanceling(false);
+    }
+  }
+
   async function onViewReport(artifactId) {
     // Set the selected artifact before awaiting so the button reflects the
     // "Downloading…" state for the whole download, not just after it resolves.
@@ -993,6 +1011,11 @@ export default function App() {
                     Open on GitHub ↗
                   </a>
                 ) : null}
+                {isActive ? (
+                  <button type="button" className="ghost stop-run" onClick={onCancelRun} disabled={canceling}>
+                    {canceling ? "Stopping…" : "⊘ Stop run"}
+                  </button>
+                ) : null}
               </div>
 
               <ol className="jobs">
@@ -1023,37 +1046,44 @@ export default function App() {
                     <p className="field-hint">No artifacts on this run.</p>
                   ) : (
                     <ul>
-                      {visibleArtifacts.map((artifact) => (
-                        <li key={artifact.id} className="artifact">
-                          <span className="artifact-name">{artifact.name}</span>
-                          <span className="artifact-size">{formatBytes(artifact.sizeInBytes)}</span>
-                          <span className="artifact-actions">
-                            {artifact.expired ? null : (
-                              <a className="artifact-dl" href={downloadHref(artifact.id, artifact.name)}>
-                                Download
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => onViewReport(artifact.id)}
-                              disabled={artifact.expired || loadingReport}
-                              aria-pressed={selectedArtifactId === artifact.id}
-                              aria-busy={loadingReport && selectedArtifactId === artifact.id}
-                            >
+                      {visibleArtifacts.map((artifact) => {
+                        // Only offer "View report" for artifacts that look like a
+                        // browsable report; everything else just gets Download.
+                        const isReport = /report/i.test(artifact.name);
+                        return (
+                          <li key={artifact.id} className="artifact">
+                            <span className="artifact-name">{artifact.name}</span>
+                            <span className="artifact-size">{formatBytes(artifact.sizeInBytes)}</span>
+                            <span className="artifact-actions">
                               {artifact.expired ? (
-                                "Expired"
-                              ) : loadingReport && selectedArtifactId === artifact.id ? (
-                                <span className="btn-loading">
-                                  <span className="spinner" aria-hidden="true" />
-                                  Downloading…
-                                </span>
+                                <span className="artifact-dl">Expired</span>
                               ) : (
-                                "View report"
+                                <a className="artifact-dl" href={downloadHref(artifact.id, artifact.name)}>
+                                  Download
+                                </a>
                               )}
-                            </button>
-                          </span>
-                        </li>
-                      ))}
+                              {isReport && !artifact.expired ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onViewReport(artifact.id)}
+                                  disabled={loadingReport}
+                                  aria-pressed={selectedArtifactId === artifact.id}
+                                  aria-busy={loadingReport && selectedArtifactId === artifact.id}
+                                >
+                                  {loadingReport && selectedArtifactId === artifact.id ? (
+                                    <span className="btn-loading">
+                                      <span className="spinner" aria-hidden="true" />
+                                      Downloading…
+                                    </span>
+                                  ) : (
+                                    "View report"
+                                  )}
+                                </button>
+                              ) : null}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                   {reportNote ? <p className="notice" role="status">{reportNote}</p> : null}

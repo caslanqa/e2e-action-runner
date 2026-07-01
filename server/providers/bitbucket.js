@@ -285,5 +285,11 @@ export function createBitbucketAdapter({ email, token } = {}) {
       }
       return Buffer.from(await res.arrayBuffer());
     },
+
+    async cancelRun(runId) {
+      const { workspace, slug } = need();
+      await bb(`/repositories/${workspace}/${slug}/pipelines/${encodeURIComponent(runId)}/stopPipeline`, { method: "POST" });
+      return { ok: true };
+    },
   };
 }

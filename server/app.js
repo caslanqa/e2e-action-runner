@@ -108,6 +108,10 @@ export async function createApp({ serveStaticDir = null, logger = true } = {}) {
     return connections.active().getRun(request.params.id);
   });
 
+  app.post("/api/runs/:id/cancel", async (request) => {
+    return connections.active().cancelRun(request.params.id);
+  });
+
   app.get("/api/runs/:id/jobs", async (request) => {
     return connections.active().getRunJobs(request.params.id);
   });
