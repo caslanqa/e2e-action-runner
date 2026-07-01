@@ -33,20 +33,23 @@ export function getToken() {
 }
 
 /** Update the default owner/repo. */
-export function setDefaults({ owner, repo } = {}) {
-  // Ignore empty values so a blank Settings field keeps the current owner/repo.
-  if (owner) {
-    config.owner = owner;
-  }
-  if (repo) {
-    config.repo = repo;
-  }
+/** Set the active repository definitively (empty clears it). */
+export function setActiveRepo(owner = "", repo = "") {
+  config.owner = owner || "";
+  config.repo = repo || "";
+}
+
+/** Validate a token by resolving its login, using a throwaway client. */
+export async function getUserFor(token) {
+  const probe = new Octokit({ auth: token });
+  const { data } = await probe.rest.users.getAuthenticated();
+  return data.login;
 }
 
 // Return the configured client or throw a friendly 401 if no token is set yet.
 function client() {
   if (!octokit) {
-    const error = new Error("GitHub token is not configured. Open Settings and add a fine-grained PAT.");
+    const error = new Error("No active GitHub connection — add one first.");
     error.status = 401;
     throw error;
   }
@@ -69,6 +72,22 @@ export async function getAuthUser() {
 export async function getRepoMeta(owner = config.owner, repo = config.repo) {
   const { data } = await client().rest.repos.get({ owner, repo });
   return { defaultBranch: data.default_branch, fullName: data.full_name, htmlUrl: data.html_url };
+}
+
+/** Repositories the authenticated user can access (for the repo picker). */
+export async function listRepos() {
+  const repos = await client().paginate(client().rest.repos.listForAuthenticatedUser, {
+    per_page: 100,
+    sort: "updated",
+    affiliation: "owner,collaborator,organization_member",
+  });
+  return repos.map((r) => ({
+    fullName: r.full_name,
+    owner: r.owner.login,
+    repo: r.name,
+    private: r.private,
+    defaultBranch: r.default_branch,
+  }));
 }
 
 /** Active and inactive workflows defined in the repo. */

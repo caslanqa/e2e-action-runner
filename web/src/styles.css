@@ -290,6 +290,76 @@ input[type="checkbox"] {
   text-decoration: underline;
 }
 
+/* ---- connections ---------------------------------------------------------- */
+
+.connections-view {
+  max-width: 680px;
+}
+
+.conn-list {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.conn-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.conn-item.active {
+  border-color: var(--accent);
+  background: rgba(76, 139, 245, 0.12);
+}
+
+.conn-provider {
+  font-size: 1.2rem;
+  flex: 0 0 auto;
+}
+
+.conn-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.conn-label {
+  font-weight: 600;
+}
+
+.conn-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.conn-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--success);
+  border: 1px solid var(--success);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+.conn-add {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.conn-add h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
 /* ---- header --------------------------------------------------------------- */
 
 .app-header {

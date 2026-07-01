@@ -17,16 +17,24 @@ async function http(url, options) {
   return data;
 }
 
+const jsonPost = (url, body) =>
+  http(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+
 export const api = {
   config: () => http("/api/config"),
-  settings: () => http("/api/settings"),
-  saveSettings: (body) =>
-    http("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  clearToken: () => http("/api/settings/token", { method: "DELETE" }),
+
+  // Connections (multi-account)
+  connections: () => http("/api/connections"),
+  addConnection: (body) => jsonPost("/api/connections", body),
+  removeConnection: (id) => http(`/api/connections/${id}`, { method: "DELETE" }),
+  activateConnection: (id) => jsonPost(`/api/connections/${id}/activate`),
+  repos: () => http("/api/repos"),
+  setActiveRepo: (body) => jsonPost("/api/active-repo", body),
+
   meta: (coords) => http(`/api/meta${qs(coords)}`),
   workflows: (coords) => http(`/api/workflows${qs(coords)}`),
   branches: (coords) => http(`/api/branches${qs(coords)}`),

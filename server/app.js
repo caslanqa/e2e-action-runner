@@ -4,15 +4,16 @@ import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 
+import * as connections from "./connections.js";
 import * as gh from "./github.js";
 import { extractReport, reportsRoot } from "./report.js";
 
 /**
  * Build the Fastify app with all API routes. Optionally serves the built UI from
- * `serveStaticDir` (single-port mode), and calls `onSettingsChange` so the host
- * (CLI or Electron) can persist token/owner/repo changes.
+ * `serveStaticDir` (single-port mode). Connection state + persistence are set up
+ * by the host via connections.init() before the server starts.
  */
-export async function createApp({ serveStaticDir = null, onSettingsChange = null, logger = true } = {}) {
+export async function createApp({ serveStaticDir = null, logger = true } = {}) {
   const app = Fastify({ logger });
 
   await app.register(cors, { origin: true });
@@ -48,64 +49,42 @@ export async function createApp({ serveStaticDir = null, onSettingsChange = null
 
   app.get("/api/config", async () => {
     const user = await gh.getAuthUser().catch(() => null);
-    return { owner: gh.config.owner, repo: gh.config.repo, user, hasToken: gh.hasToken() };
+    return { ...connections.getState(), user };
   });
 
-  // Settings: report status (never the token) and accept updates.
-  app.get("/api/settings", async () => {
-    const user = await gh.getAuthUser().catch(() => null);
-    return {
-      hasToken: gh.hasToken(),
-      tokenValid: Boolean(user),
-      user,
-      owner: gh.config.owner,
-      repo: gh.config.repo,
-    };
+  // ---- connection management (multi-account) ----
+
+  app.get("/api/connections", async () => {
+    return connections.getState();
   });
 
-  // Persist token/owner/repo off the request path. The Electron keychain write
-  // (safeStorage.encryptString) is synchronous and can briefly block the main
-  // process the first time access is granted; running it after the response is
-  // queued stops the Settings save from appearing to freeze.
-  function persistLater(snapshot) {
-    if (!onSettingsChange) {
-      return;
+  app.post("/api/connections", async (request) => {
+    const { provider = "github", token, label } = request.body ?? {};
+    if (provider !== "github") {
+      const error = new Error(`Provider "${provider}" is not supported yet.`);
+      error.status = 400;
+      throw error;
     }
-    setImmediate(() => {
-      try {
-        onSettingsChange(snapshot);
-      } catch (error) {
-        app.log.error(error);
-      }
-    });
-  }
-
-  app.post("/api/settings", async (request) => {
-    const { token, owner, repo } = request.body ?? {};
-    if (typeof token === "string" && token.trim().length > 0) {
-      gh.setToken(token.trim());
-    }
-    gh.setDefaults({ owner, repo });
-
-    // Validate the token by resolving the authenticated user.
-    const user = await gh.getAuthUser().catch(() => null);
-    const result = {
-      hasToken: gh.hasToken(),
-      tokenValid: Boolean(user),
-      user,
-      owner: gh.config.owner,
-      repo: gh.config.repo,
-    };
-
-    persistLater({ token: gh.getToken(), owner: gh.config.owner, repo: gh.config.repo });
-
-    return result;
+    return connections.addGitHub(token, label);
   });
 
-  app.delete("/api/settings/token", async () => {
-    gh.setToken(null);
-    persistLater({ token: null, owner: gh.config.owner, repo: gh.config.repo });
-    return { hasToken: false };
+  app.delete("/api/connections/:id", async (request) => {
+    return connections.remove(request.params.id);
+  });
+
+  app.post("/api/connections/:id/activate", async (request) => {
+    return connections.setActive(request.params.id);
+  });
+
+  // Repositories available to the active connection (for the repo picker).
+  app.get("/api/repos", async () => {
+    return gh.listRepos();
+  });
+
+  // Select which repo the active connection operates on.
+  app.post("/api/active-repo", async (request) => {
+    const { owner, repo } = request.body ?? {};
+    return connections.setActiveRepo(owner, repo);
   });
 
   app.get("/api/meta", async (request) => {
@@ -192,14 +171,8 @@ export async function createApp({ serveStaticDir = null, onSettingsChange = null
 }
 
 /** Build, start listening, and return the Fastify instance. */
-export async function startServer({
-  port = 5179,
-  host = "127.0.0.1",
-  serveStaticDir = null,
-  onSettingsChange = null,
-  logger = true,
-} = {}) {
-  const app = await createApp({ serveStaticDir, onSettingsChange, logger });
+export async function startServer({ port = 5179, host = "127.0.0.1", serveStaticDir = null, logger = true } = {}) {
+  const app = await createApp({ serveStaticDir, logger });
   await app.listen({ port, host });
   return app;
 }

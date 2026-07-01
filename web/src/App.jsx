@@ -124,7 +124,7 @@ function InputField({ field, value, onChange }) {
 
 const GITHUB = "https://github.com";
 
-function Sidebar({ view, onView, user, hasToken, repoFullName }) {
+function Sidebar({ view, onView, user, hasToken, connectionCount, repoFullName }) {
   const repoUrl = repoFullName ? `${GITHUB}/${repoFullName}` : GITHUB;
   return (
     <nav className="sidebar" aria-label="Primary">
@@ -145,12 +145,12 @@ function Sidebar({ view, onView, user, hasToken, repoFullName }) {
         <li>
           <button
             type="button"
-            className={`side-item ${view === "settings" ? "active" : ""}`}
-            aria-current={view === "settings" ? "page" : undefined}
-            onClick={() => onView("settings")}
+            className={`side-item ${view === "connections" ? "active" : ""}`}
+            aria-current={view === "connections" ? "page" : undefined}
+            onClick={() => onView("connections")}
           >
-            <span className="side-icon" aria-hidden="true">⚙</span>
-            <span className="side-label">Settings</span>
+            <span className="side-icon" aria-hidden="true">🔌</span>
+            <span className="side-label">Connections</span>
             {!hasToken ? <span className="side-dot" aria-hidden="true" /> : null}
           </button>
         </li>
@@ -187,104 +187,129 @@ function Sidebar({ view, onView, user, hasToken, repoFullName }) {
 
       <div className="side-foot">
         <span className={`side-status ${hasToken && user ? "ok" : "warn"}`} aria-hidden="true">●</span>
-        <span className="side-label side-user">{user ? user : "No token"}</span>
+        <span className="side-label side-user">
+          {user ? user : connectionCount > 0 ? "Select a connection" : "No connection"}
+        </span>
       </div>
     </nav>
   );
 }
 
-// ---- settings view ----------------------------------------------------------
+// ---- connections view (multi-account) --------------------------------------
 
-function SettingsView({ status, busy, error, onSave, onClear }) {
-  // Fields start empty by default; the current saved values appear as
-  // placeholders, and a blank field on save means "keep the current value".
+const PROVIDERS = [
+  { value: "github", label: "GitHub", enabled: true },
+  { value: "gitlab", label: "GitLab (coming soon)", enabled: false },
+  { value: "bitbucket", label: "Bitbucket (coming soon)", enabled: false },
+];
+
+function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate, onRemove }) {
+  const [provider, setProvider] = useState("github");
   const [token, setToken] = useState("");
-  const [owner, setOwner] = useState("");
-  const [repo, setRepo] = useState("");
+  const [label, setLabel] = useState("");
 
   function submit(event) {
     event.preventDefault();
-    onSave({ token, owner, repo });
+    onAdd({ provider, token, label });
     setToken("");
+    setLabel("");
   }
 
-  const statusClass = status.hasToken && status.user ? "ok" : "warn";
-
   return (
-    <section className="card settings-view" aria-labelledby="settings-h">
-      <h2 id="settings-h">Settings</h2>
-
-      <div className={`token-status ${statusClass}`} role="status">
-        {status.hasToken ? (
-          status.user ? (
-            <>Token active — authenticated as <strong>{status.user}</strong></>
-          ) : (
-            <>Token is set but GitHub rejected it (invalid or expired). Paste a fresh one below.</>
-          )
-        ) : (
-          <>No token configured. Generate a fine-grained PAT and paste it below.</>
-        )}
-      </div>
-
+    <section className="card connections-view" aria-labelledby="conn-h">
+      <h2 id="conn-h">Connections</h2>
       <p className="field-hint">
-        Fine-grained PATs expire (often 30 days). When yours expires, create a new one on GitHub and paste it
-        here — your owner/repo settings stay. The token is stored encrypted in your macOS Keychain.
+        Connect one or more accounts. Choose which one is active, then pick a repository on the Dashboard.
+        Each token is stored encrypted in your OS keychain.
       </p>
 
-      <div className="settings-links">
-        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
-          Create new fine-grained PAT ↗
-        </a>
-        <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noreferrer">
-          Manage existing PATs ↗
-        </a>
-      </div>
+      {connections.length > 0 ? (
+        <ul className="conn-list" aria-label="Saved connections">
+          {connections.map((connection) => (
+            <li key={connection.id} className={`conn-item ${connection.id === activeId ? "active" : ""}`}>
+              <span className="conn-provider" aria-hidden="true">{connection.provider === "github" ? "🐙" : "•"}</span>
+              <span className="conn-main">
+                <span className="conn-label">{connection.label}</span>
+                <span className="conn-sub">
+                  {connection.provider}
+                  {connection.login ? ` · ${connection.login}` : ""}
+                </span>
+              </span>
+              {connection.id === activeId ? (
+                <span className="conn-badge">Active</span>
+              ) : (
+                <button type="button" className="ghost" onClick={() => onActivate(connection.id)} disabled={busy}>
+                  Use
+                </button>
+              )}
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => onRemove(connection.id)}
+                disabled={busy}
+                aria-label={`Remove connection ${connection.label}`}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="empty">No connections yet — add one below.</p>
+      )}
 
-      <form onSubmit={submit}>
+      <form className="conn-add" onSubmit={submit}>
+        <h3>Add a connection</h3>
+
         <div className="field">
-          <label htmlFor="set-token">GitHub token (PAT)</label>
+          <label htmlFor="conn-provider">Service provider</label>
+          <select id="conn-provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+            {PROVIDERS.map((option) => (
+              <option key={option.value} value={option.value} disabled={!option.enabled}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor="conn-token">GitHub token (PAT)</label>
           <input
-            id="set-token"
+            id="conn-token"
             type="password"
             autoComplete="off"
             value={token}
-            placeholder={status.hasToken ? "•••••••• saved — leave blank to keep" : "github_pat_… or ghp_…"}
+            placeholder="github_pat_… or ghp_…"
             onChange={(event) => setToken(event.target.value)}
           />
           <p className="field-hint">
-            Required on this repo: Actions (Read &amp; write), Contents (Read), Metadata (Read).
+            Fine-grained PAT with Actions (Read &amp; write), Contents (Read), Metadata (Read) on the repos you'll use.
           </p>
         </div>
 
         <div className="field">
-          <label htmlFor="set-owner">Owner</label>
+          <label htmlFor="conn-label">Label (optional)</label>
           <input
-            id="set-owner"
-            value={owner}
-            placeholder={status.owner ? `${status.owner} (current — leave blank to keep)` : "owner (e.g. my-org)"}
-            onChange={(event) => setOwner(event.target.value)}
+            id="conn-label"
+            value={label}
+            placeholder="e.g. Work / Personal — defaults to your username"
+            onChange={(event) => setLabel(event.target.value)}
           />
         </div>
 
-        <div className="field">
-          <label htmlFor="set-repo">Repo</label>
-          <input
-            id="set-repo"
-            value={repo}
-            placeholder={status.repo ? `${status.repo} (current — leave blank to keep)` : "repository name"}
-            onChange={(event) => setRepo(event.target.value)}
-          />
+        <div className="settings-links">
+          <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
+            Create new fine-grained PAT ↗
+          </a>
+          <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noreferrer">
+            Manage PATs ↗
+          </a>
         </div>
 
         <div className="settings-actions">
-          <button type="submit" className="run-button" disabled={busy}>
-            {busy ? "Saving…" : "Save settings"}
+          <button type="submit" className="run-button" disabled={busy || !token.trim()}>
+            {busy ? "Adding…" : "Add connection"}
           </button>
-          {status.hasToken ? (
-            <button type="button" className="ghost" onClick={onClear} disabled={busy}>
-              Clear token
-            </button>
-          ) : null}
         </div>
 
         {error ? <p className="error" role="alert">{error}</p> : null}
@@ -298,7 +323,13 @@ function SettingsView({ status, busy, error, onSave, onClear }) {
 export default function App() {
   const [coords, setCoords] = useState({ owner: "", repo: "" });
   const [user, setUser] = useState(null);
+  const [hasToken, setHasToken] = useState(false);
   const [connected, setConnected] = useState(false);
+
+  const [connections, setConnections] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [repos, setRepos] = useState([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
 
   const [workflows, setWorkflows] = useState([]);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("");
@@ -319,30 +350,66 @@ export default function App() {
   const [recentRuns, setRecentRuns] = useState([]);
 
   const [view, setView] = useState("dashboard");
-  const [hasToken, setHasToken] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [settingsError, setSettingsError] = useState(null);
+  const [savingConn, setSavingConn] = useState(false);
+  const [connError, setConnError] = useState(null);
 
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
 
-  // Load the server's default coords + token identity on mount, then connect.
+  // Load connections + the active connection's repo on mount.
   useEffect(() => {
     api
       .config()
       .then((cfg) => {
-        setCoords({ owner: cfg.owner ?? "", repo: cfg.repo ?? "" });
-        setUser(cfg.user);
-        setHasToken(Boolean(cfg.hasToken));
-        if (!cfg.hasToken) {
-          setView("settings");
-        } else if (cfg.owner && cfg.repo) {
-          loadRepo({ owner: cfg.owner, repo: cfg.repo });
+        setConnections(cfg.connections ?? []);
+        setActiveId(cfg.activeId ?? null);
+        setCoords(cfg.activeRepo ?? { owner: "", repo: "" });
+        setHasToken(Boolean(cfg.hasActiveToken));
+        setUser(cfg.user ?? cfg.active?.login ?? null);
+        if (!cfg.activeId) {
+          setView("connections");
+          return;
+        }
+        loadReposList();
+        if (cfg.activeRepo?.owner && cfg.activeRepo?.repo) {
+          loadRepo(cfg.activeRepo);
         }
       })
       .catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function applyState(state) {
+    setConnections(state.connections ?? []);
+    setActiveId(state.activeId ?? null);
+    setCoords(state.activeRepo ?? { owner: "", repo: "" });
+    setHasToken(Boolean(state.hasActiveToken));
+    const active = (state.connections ?? []).find((c) => c.id === state.activeId);
+    setUser(active?.login ?? null);
+  }
+
+  function resetDashboard() {
+    setSelectedWorkflowId("");
+    setRef("");
+    setRun(null);
+    setJobs([]);
+    setArtifacts([]);
+    setRecentRuns([]);
+    setReportUrl(null);
+    setReportNote(null);
+    setWorkflows([]);
+    setBranches([]);
+    setConnected(false);
+  }
+
+  function loadReposList() {
+    setLoadingRepos(true);
+    api
+      .repos()
+      .then(setRepos)
+      .catch(() => setRepos([]))
+      .finally(() => setLoadingRepos(false));
+  }
 
   async function loadRepo(target) {
     setError(null);
@@ -387,51 +454,83 @@ export default function App() {
     setRun(selected);
   }
 
-  // Save token/owner/repo from the Settings view, then reconnect on success.
-  async function onSaveSettings({ token, owner, repo }) {
-    const repoChanged = (owner && owner !== coords.owner) || (repo && repo !== coords.repo);
-    setSavingSettings(true);
-    setSettingsError(null);
+  // ---- connection actions ----
+
+  async function onAddConnection({ provider, token, label }) {
+    setSavingConn(true);
+    setConnError(null);
     try {
-      const res = await api.saveSettings({ token, owner, repo });
-      setHasToken(res.hasToken);
-      setUser(res.user);
-      setCoords({ owner: res.owner, repo: res.repo });
-      if (res.hasToken && res.tokenValid) {
-        // A different repo invalidates the old workflow/branch/run selections.
-        if (repoChanged) {
-          setSelectedWorkflowId("");
-          setRef("");
-          setRun(null);
-          setJobs([]);
-          setArtifacts([]);
-          setRecentRuns([]);
-          setReportUrl(null);
-          setReportNote(null);
-        }
-        await loadRepo({ owner: res.owner, repo: res.repo });
-        setView("dashboard");
-      } else if (res.hasToken && !res.tokenValid) {
-        setSettingsError("Token saved, but GitHub rejected it (invalid or expired). Check the scopes and paste a fresh one.");
-      } else {
-        setSettingsError("No token set — paste a fine-grained PAT.");
-      }
+      const state = await api.addConnection({ provider, token, label });
+      applyState(state);
+      resetDashboard();
+      loadReposList();
+      setView("dashboard");
     } catch (err) {
-      setSettingsError(err.message);
+      setConnError(err.message);
     } finally {
-      setSavingSettings(false);
+      setSavingConn(false);
     }
   }
 
-  async function onClearToken() {
-    setSettingsError(null);
+  async function onActivateConnection(id) {
+    setConnError(null);
+    setError(null);
     try {
-      await api.clearToken();
-      setHasToken(false);
-      setUser(null);
-      setConnected(false);
+      const state = await api.activateConnection(id);
+      applyState(state);
+      resetDashboard();
+      loadReposList();
+      if (state.activeRepo?.owner && state.activeRepo?.repo) {
+        await loadRepo(state.activeRepo);
+      }
     } catch (err) {
-      setSettingsError(err.message);
+      setConnError(err.message);
+      setError(err.message);
+    }
+  }
+
+  async function onRemoveConnection(id) {
+    setConnError(null);
+    try {
+      const state = await api.removeConnection(id);
+      applyState(state);
+      resetDashboard();
+      if (state.activeId) {
+        loadReposList();
+        if (state.activeRepo?.owner && state.activeRepo?.repo) {
+          await loadRepo(state.activeRepo);
+        }
+      } else {
+        setRepos([]);
+        setView("connections");
+      }
+    } catch (err) {
+      setConnError(err.message);
+    }
+  }
+
+  // Pick which repo the active connection operates on.
+  async function selectRepo(owner, repo) {
+    setError(null);
+    resetDashboard();
+    try {
+      const state = await api.setActiveRepo({ owner, repo });
+      applyState(state);
+      await loadRepo({ owner, repo });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function onRepoSelect(fullName) {
+    if (!fullName) {
+      return;
+    }
+    const slash = fullName.indexOf("/");
+    const owner = fullName.slice(0, slash);
+    const repo = fullName.slice(slash + 1);
+    if (owner !== coords.owner || repo !== coords.repo) {
+      selectRepo(owner, repo);
     }
   }
 
@@ -511,9 +610,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run?.id, run?.status]);
 
-  // Once the run completes, fetch the final jobs + artifacts exactly once. This
-  // effect's deps are stable after completion (polling has stopped), so its
-  // cancelled flag never flips spuriously — the artifacts always land.
+  // Once the run completes, fetch the final jobs + artifacts exactly once.
   useEffect(() => {
     if (run?.status !== "completed" || !run?.id) {
       return;
@@ -533,7 +630,6 @@ export default function App() {
         }
       }
     })();
-    // Refresh the picker so the just-finished run shows its final conclusion.
     loadRecentRuns(selectedWorkflowId);
     return () => {
       cancelled = true;
@@ -558,8 +654,6 @@ export default function App() {
     const end = run.status === "completed" && run.updatedAt ? new Date(run.updatedAt).getTime() : now;
     return end - start;
   }, [run, now]);
-
-  const selectedWorkflow = workflows.find((w) => String(w.id) === String(selectedWorkflowId));
 
   function setField(name, value) {
     setFormValues((current) => ({ ...current, [name]: value }));
@@ -636,6 +730,13 @@ export default function App() {
   }
 
   const isActive = run && run.status !== "completed";
+  const hasRepo = Boolean(coords.owner && coords.repo);
+  const currentRepoFull = hasRepo ? `${coords.owner}/${coords.repo}` : "";
+  // Keep the current repo selectable even if it isn't in the fetched list.
+  const repoOptions =
+    currentRepoFull && !repos.some((r) => r.fullName === currentRepoFull)
+      ? [{ fullName: currentRepoFull, private: false }, ...repos]
+      : repos;
 
   // allure-results is raw data (no viewable report), so we hide it from the list.
   const visibleArtifacts = artifacts.filter((artifact) => artifact.name !== "allure-results");
@@ -648,17 +749,20 @@ export default function App() {
         onView={setView}
         user={user}
         hasToken={hasToken}
-        repoFullName={coords.owner && coords.repo ? `${coords.owner}/${coords.repo}` : ""}
+        connectionCount={connections.length}
+        repoFullName={hasRepo ? `${coords.owner}/${coords.repo}` : ""}
       />
       <div className="app-body">
-        {view === "settings" ? (
+        {view === "connections" ? (
           <main id="main" tabIndex={-1} className="settings-main">
-            <SettingsView
-              status={{ hasToken, user, owner: coords.owner, repo: coords.repo }}
-              busy={savingSettings}
-              error={settingsError}
-              onSave={onSaveSettings}
-              onClear={onClearToken}
+            <ConnectionsView
+              connections={connections}
+              activeId={activeId}
+              busy={savingConn}
+              error={connError}
+              onAdd={onAddConnection}
+              onActivate={onActivateConnection}
+              onRemove={onRemoveConnection}
             />
           </main>
         ) : (
@@ -667,17 +771,17 @@ export default function App() {
               <div className="brand">
                 <h1>E2E Action Runner</h1>
                 <p className="subtitle">
-                  {coords.owner && coords.repo ? `${coords.owner}/${coords.repo}` : "Configure a repo in Settings"}
+                  {hasRepo ? `${coords.owner}/${coords.repo}` : hasToken ? "Pick a repository below" : "Add a connection to start"}
                 </p>
               </div>
               <p className="token-user">
                 {user ? (
-                  <>Authenticated as <strong>{user}</strong></>
+                  <>Connected as <strong>{user}</strong></>
                 ) : (
                   <>
-                    No token —{" "}
-                    <button type="button" className="linklike" onClick={() => setView("settings")}>
-                      open Settings
+                    No connection —{" "}
+                    <button type="button" className="linklike" onClick={() => setView("connections")}>
+                      add one
                     </button>
                   </>
                 )}
@@ -689,6 +793,52 @@ export default function App() {
           <h2 id="config-heading">Run configuration</h2>
 
           <div className="field">
+            <label htmlFor="connection-picker">Account</label>
+            <select
+              id="connection-picker"
+              value={activeId ?? ""}
+              disabled={connections.length === 0}
+              onChange={(event) => onActivateConnection(event.target.value)}
+            >
+              {connections.length === 0 ? (
+                <option value="">No connections yet</option>
+              ) : (
+                connections.map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.label}
+                    {connection.login && connection.login !== connection.label ? ` (${connection.login})` : ""} · {connection.provider}
+                  </option>
+                ))
+              )}
+            </select>
+            <p className="field-hint">
+              <button type="button" className="linklike" onClick={() => setView("connections")}>
+                Manage connections
+              </button>
+            </p>
+          </div>
+
+          <div className="field">
+            <label htmlFor="repo-picker">Repository</label>
+            <select
+              id="repo-picker"
+              value={currentRepoFull}
+              disabled={!hasToken || loadingRepos}
+              onChange={(event) => onRepoSelect(event.target.value)}
+            >
+              <option value="">
+                {!hasToken ? "Add a connection first" : loadingRepos ? "Loading repositories…" : "Select a repository…"}
+              </option>
+              {repoOptions.map((repository) => (
+                <option key={repository.fullName} value={repository.fullName}>
+                  {repository.fullName}
+                  {repository.private ? " (private)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
             <label htmlFor="workflow">Workflow</label>
             <select
               id="workflow"
@@ -696,7 +846,7 @@ export default function App() {
               disabled={!connected}
               onChange={(event) => setSelectedWorkflowId(event.target.value)}
             >
-              <option value="">{connected ? "Select a workflow…" : "Connect to a repo first"}</option>
+              <option value="">{connected ? "Select a workflow…" : "Select a repository first"}</option>
               {workflows.map((workflow) => (
                 <option key={workflow.id} value={workflow.id}>
                   {workflow.name} ({workflow.path.replace(".github/workflows/", "")})
