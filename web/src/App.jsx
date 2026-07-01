@@ -325,15 +325,15 @@ function HelpTip({ help, providerLabel }) {
   );
 }
 
-function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate, onRemove }) {
-  const [provider, setProvider] = useState("github");
+function ConnectionsView({ connections, activeId, busy, error, provider, onProviderChange, onAdd, onActivate, onRemove }) {
   const [creds, setCreds] = useState({});
   const [label, setLabel] = useState("");
   const help = PROVIDER_HELP[provider] ?? PROVIDER_HELP.github;
   const complete = help.fields.every((field) => (creds[field.name] ?? "").trim());
 
+  // Provider selection is lifted to App so the sidebar links can follow it.
   function changeProvider(value) {
-    setProvider(value);
+    onProviderChange(value);
     setCreds({});
   }
 
@@ -473,6 +473,7 @@ export default function App() {
   const [recentRuns, setRecentRuns] = useState([]);
 
   const [view, setView] = useState("dashboard");
+  const [connProvider, setConnProvider] = useState("github");
   const [savingConn, setSavingConn] = useState(false);
   const [connError, setConnError] = useState(null);
 
@@ -875,6 +876,12 @@ export default function App() {
   // allure-results is raw data (no viewable report), so we hide it from the list.
   const visibleArtifacts = artifacts.filter((artifact) => artifact.name !== "allure-results");
 
+  // On the Connections page the sidebar links follow the provider being added;
+  // on the Dashboard they follow the active connection + its repo.
+  const activeProvider = connections.find((c) => c.id === activeId)?.provider;
+  const sidebarProvider = view === "connections" ? connProvider : activeProvider;
+  const sidebarRepoFull = view === "connections" ? "" : currentRepoFull;
+
   return (
     <div className="app-shell">
       <a href="#main" className="skip-link">Skip to main content</a>
@@ -884,8 +891,8 @@ export default function App() {
         user={user}
         hasToken={hasToken}
         connectionCount={connections.length}
-        provider={connections.find((c) => c.id === activeId)?.provider}
-        repoFullName={currentRepoFull}
+        provider={sidebarProvider}
+        repoFullName={sidebarRepoFull}
       />
       <div className="app-body">
         {view === "connections" ? (
@@ -895,6 +902,8 @@ export default function App() {
               activeId={activeId}
               busy={savingConn}
               error={connError}
+              provider={connProvider}
+              onProviderChange={setConnProvider}
               onAdd={onAddConnection}
               onActivate={onActivateConnection}
               onRemove={onRemoveConnection}
