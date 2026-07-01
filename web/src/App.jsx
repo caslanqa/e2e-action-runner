@@ -200,13 +200,13 @@ function Sidebar({ view, onView, user, hasToken, connectionCount, repoFullName }
 const PROVIDERS = [
   { value: "github", label: "GitHub", enabled: true },
   { value: "gitlab", label: "GitLab", enabled: true },
-  { value: "bitbucket", label: "Bitbucket (coming soon)", enabled: false },
+  { value: "bitbucket", label: "Bitbucket", enabled: true },
 ];
 
+// Each provider declares its own credential fields so the form adapts.
 const PROVIDER_HELP = {
   github: {
-    tokenLabel: "GitHub token (PAT)",
-    placeholder: "github_pat_… or ghp_…",
+    fields: [{ name: "token", label: "GitHub token (PAT)", type: "password", placeholder: "github_pat_… or ghp_…" }],
     hint: "Fine-grained PAT with Actions (Read & write), Contents (Read), Metadata (Read) on the repos you'll use.",
     links: [
       { href: "https://github.com/settings/personal-access-tokens/new", label: "Create fine-grained PAT ↗" },
@@ -214,10 +214,17 @@ const PROVIDER_HELP = {
     ],
   },
   gitlab: {
-    tokenLabel: "GitLab token (PAT)",
-    placeholder: "glpat-…",
+    fields: [{ name: "token", label: "GitLab token (PAT)", type: "password", placeholder: "glpat-…" }],
     hint: "Personal Access Token with the 'api' scope on the projects you'll use.",
     links: [{ href: "https://gitlab.com/-/user_settings/personal_access_tokens", label: "Create GitLab PAT ↗" }],
+  },
+  bitbucket: {
+    fields: [
+      { name: "email", label: "Atlassian email", type: "email", placeholder: "you@example.com" },
+      { name: "token", label: "API token", type: "password", placeholder: "ATATT…" },
+    ],
+    hint: "Atlassian API token (Basic auth: your email + the token) with Pipelines read/write. App passwords are deprecated.",
+    links: [{ href: "https://id.atlassian.com/manage-profile/security/api-tokens", label: "Create API token ↗" }],
   },
 };
 
@@ -228,19 +235,28 @@ function providerIcon(provider) {
   if (provider === "gitlab") {
     return "🦊";
   }
+  if (provider === "bitbucket") {
+    return "🪣";
+  }
   return "•";
 }
 
 function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate, onRemove }) {
   const [provider, setProvider] = useState("github");
-  const [token, setToken] = useState("");
+  const [creds, setCreds] = useState({});
   const [label, setLabel] = useState("");
   const help = PROVIDER_HELP[provider] ?? PROVIDER_HELP.github;
+  const complete = help.fields.every((field) => (creds[field.name] ?? "").trim());
+
+  function changeProvider(value) {
+    setProvider(value);
+    setCreds({});
+  }
 
   function submit(event) {
     event.preventDefault();
-    onAdd({ provider, token, label });
-    setToken("");
+    onAdd({ provider, label, ...creds });
+    setCreds({});
     setLabel("");
   }
 
@@ -292,7 +308,7 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
 
         <div className="field">
           <label htmlFor="conn-provider">Service provider</label>
-          <select id="conn-provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+          <select id="conn-provider" value={provider} onChange={(event) => changeProvider(event.target.value)}>
             {PROVIDERS.map((option) => (
               <option key={option.value} value={option.value} disabled={!option.enabled}>
                 {option.label}
@@ -301,18 +317,20 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
           </select>
         </div>
 
-        <div className="field">
-          <label htmlFor="conn-token">{help.tokenLabel}</label>
-          <input
-            id="conn-token"
-            type="password"
-            autoComplete="off"
-            value={token}
-            placeholder={help.placeholder}
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <p className="field-hint">{help.hint}</p>
-        </div>
+        {help.fields.map((field) => (
+          <div className="field" key={field.name}>
+            <label htmlFor={`conn-${field.name}`}>{field.label}</label>
+            <input
+              id={`conn-${field.name}`}
+              type={field.type}
+              autoComplete="off"
+              value={creds[field.name] ?? ""}
+              placeholder={field.placeholder}
+              onChange={(event) => setCreds((current) => ({ ...current, [field.name]: event.target.value }))}
+            />
+          </div>
+        ))}
+        <p className="field-hint">{help.hint}</p>
 
         <div className="field">
           <label htmlFor="conn-label">Label (optional)</label>
@@ -333,7 +351,7 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
         </div>
 
         <div className="settings-actions">
-          <button type="submit" className="run-button" disabled={busy || !token.trim()}>
+          <button type="submit" className="run-button" disabled={busy || !complete}>
             {busy ? "Adding…" : "Add connection"}
           </button>
         </div>
@@ -480,11 +498,11 @@ export default function App() {
 
   // ---- connection actions ----
 
-  async function onAddConnection({ provider, token, label }) {
+  async function onAddConnection(payload) {
     setSavingConn(true);
     setConnError(null);
     try {
-      const state = await api.addConnection({ provider, token, label });
+      const state = await api.addConnection(payload);
       applyState(state);
       resetDashboard();
       loadReposList();
