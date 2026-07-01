@@ -360,6 +360,118 @@ input[type="checkbox"] {
   margin-bottom: 0.75rem;
 }
 
+.conn-add-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.conn-add-head h3 {
+  margin: 0;
+}
+
+/* ---- help "?" popup (hover + keyboard focus) ------------------------------ */
+
+.help {
+  position: relative;
+  display: inline-flex;
+}
+
+.help-trigger {
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+.help-trigger:hover,
+.help:focus-within .help-trigger {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.help-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  width: 320px;
+  max-width: 78vw;
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--text);
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.help:hover .help-popup,
+.help:focus-within .help-popup {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-popup {
+    transition: none;
+  }
+}
+
+.help-summary {
+  line-height: 1.4;
+}
+
+.help-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.6rem;
+}
+
+.help-h {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.help-item {
+  line-height: 1.35;
+}
+
+.help-popup code {
+  background: var(--panel-2);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+.help-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.65rem;
+}
+
 /* ---- header --------------------------------------------------------------- */
 
 .app-header {

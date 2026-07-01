@@ -122,10 +122,38 @@ function InputField({ field, value, onChange }) {
 
 // ---- left navigation (hover/focus to expand) -------------------------------
 
-const GITHUB = "https://github.com";
+// Provider-specific external links for the sidebar (token pages + repo + CI).
+const PROVIDER_LINKS = {
+  github: {
+    host: "https://github.com",
+    tokens: [
+      { href: "https://github.com/settings/personal-access-tokens/new", label: "New PAT ↗", icon: "➕" },
+      { href: "https://github.com/settings/personal-access-tokens", label: "Manage PATs ↗", icon: "🔑" },
+    ],
+    repo: (full) => `https://github.com/${full}`,
+    ci: (full) => `https://github.com/${full}/actions`,
+    ciLabel: "Actions",
+  },
+  gitlab: {
+    host: "https://gitlab.com",
+    tokens: [{ href: "https://gitlab.com/-/user_settings/personal_access_tokens", label: "Manage PATs ↗", icon: "🔑" }],
+    repo: (full) => `https://gitlab.com/${full}`,
+    ci: (full) => `https://gitlab.com/${full}/-/pipelines`,
+    ciLabel: "Pipelines",
+  },
+  bitbucket: {
+    host: "https://bitbucket.org",
+    tokens: [{ href: "https://id.atlassian.com/manage-profile/security/api-tokens", label: "Manage API tokens ↗", icon: "🔑" }],
+    repo: (full) => `https://bitbucket.org/${full}`,
+    ci: (full) => `https://bitbucket.org/${full}/pipelines`,
+    ciLabel: "Pipelines",
+  },
+};
 
-function Sidebar({ view, onView, user, hasToken, connectionCount, repoFullName }) {
-  const repoUrl = repoFullName ? `${GITHUB}/${repoFullName}` : GITHUB;
+function Sidebar({ view, onView, user, hasToken, connectionCount, provider, repoFullName }) {
+  const links = PROVIDER_LINKS[provider] ?? PROVIDER_LINKS.github;
+  const repoUrl = repoFullName ? links.repo(repoFullName) : links.host;
+  const ciUrl = repoFullName ? links.ci(repoFullName) : links.host;
   return (
     <nav className="sidebar" aria-label="Primary">
       <div className="side-brand" aria-hidden="true">E2E</div>
@@ -159,18 +187,14 @@ function Sidebar({ view, onView, user, hasToken, connectionCount, repoFullName }
       <div className="side-sep" aria-hidden="true" />
 
       <ul className="side-nav">
-        <li>
-          <a className="side-item" href={`${GITHUB}/settings/personal-access-tokens/new`} target="_blank" rel="noreferrer">
-            <span className="side-icon" aria-hidden="true">➕</span>
-            <span className="side-label">New fine-grained PAT ↗</span>
-          </a>
-        </li>
-        <li>
-          <a className="side-item" href={`${GITHUB}/settings/personal-access-tokens`} target="_blank" rel="noreferrer">
-            <span className="side-icon" aria-hidden="true">🔑</span>
-            <span className="side-label">Manage PATs ↗</span>
-          </a>
-        </li>
+        {links.tokens.map((token) => (
+          <li key={token.href}>
+            <a className="side-item" href={token.href} target="_blank" rel="noreferrer">
+              <span className="side-icon" aria-hidden="true">{token.icon}</span>
+              <span className="side-label">{token.label}</span>
+            </a>
+          </li>
+        ))}
         <li>
           <a className="side-item" href={repoUrl} target="_blank" rel="noreferrer">
             <span className="side-icon" aria-hidden="true">📁</span>
@@ -178,9 +202,9 @@ function Sidebar({ view, onView, user, hasToken, connectionCount, repoFullName }
           </a>
         </li>
         <li>
-          <a className="side-item" href={`${repoUrl}/actions`} target="_blank" rel="noreferrer">
+          <a className="side-item" href={ciUrl} target="_blank" rel="noreferrer">
             <span className="side-icon" aria-hidden="true">⚡</span>
-            <span className="side-label">Actions ↗</span>
+            <span className="side-label">{links.ciLabel} ↗</span>
           </a>
         </li>
       </ul>
@@ -203,11 +227,14 @@ const PROVIDERS = [
   { value: "bitbucket", label: "Bitbucket", enabled: true },
 ];
 
-// Each provider declares its own credential fields so the form adapts.
+// Each provider declares its credential fields plus structured setup help
+// (summary / required scopes / notes / links) shown in the "?" popup.
 const PROVIDER_HELP = {
   github: {
     fields: [{ name: "token", label: "GitHub token (PAT)", type: "password", placeholder: "github_pat_… or ghp_…" }],
-    hint: "Fine-grained PAT with Actions (Read & write), Contents (Read), Metadata (Read) on the repos you'll use.",
+    summary: "Create a fine-grained Personal Access Token for the repos you'll use.",
+    scopes: ["Actions — Read and write", "Contents — Read", "Metadata — Read"],
+    notes: [],
     links: [
       { href: "https://github.com/settings/personal-access-tokens/new", label: "Create fine-grained PAT ↗" },
       { href: "https://github.com/settings/personal-access-tokens", label: "Manage PATs ↗" },
@@ -215,15 +242,31 @@ const PROVIDER_HELP = {
   },
   gitlab: {
     fields: [{ name: "token", label: "GitLab token (PAT)", type: "password", placeholder: "glpat-…" }],
-    hint: "Personal Access Token with the 'api' scope on the projects you'll use.",
+    summary: "Create a Personal Access Token on gitlab.com.",
+    scopes: ["api"],
+    notes: ["The workflow is your .gitlab-ci.yml pipeline; inputs come from spec:inputs (if declared)."],
     links: [{ href: "https://gitlab.com/-/user_settings/personal_access_tokens", label: "Create GitLab PAT ↗" }],
   },
   bitbucket: {
     fields: [
       { name: "email", label: "Atlassian email", type: "email", placeholder: "you@example.com" },
       { name: "token", label: "API token", type: "password", placeholder: "ATATT…" },
+      { name: "workspace", label: "Workspace ID", type: "text", placeholder: "from bitbucket.org/<workspace>" },
     ],
-    hint: "Atlassian 'API token with scopes' (use your email + the token). Bitbucket scopes: read:repository:bitbucket, read:pipeline:bitbucket, write:pipeline:bitbucket, read:workspace:bitbucket (read:user:bitbucket optional — for your display name). App passwords are deprecated.",
+    summary: "Atlassian 'API token with scopes' — used with your email. App passwords are deprecated.",
+    scopes: [
+      "read:repository:bitbucket",
+      "read:pipeline:bitbucket",
+      "write:pipeline:bitbucket",
+      "read:workspace:bitbucket",
+      "read:project:bitbucket",
+      "read:user:bitbucket",
+      "read:account:bitbucket",
+    ],
+    notes: [
+      "Workspace ID = the name in your Bitbucket URL (bitbucket.org/<workspace>).",
+      "One connection = one workspace.",
+    ],
     links: [{ href: "https://id.atlassian.com/manage-profile/security/api-tokens", label: "Create API token with scopes ↗" }],
   },
 };
@@ -239,6 +282,47 @@ function providerIcon(provider) {
     return "🪣";
   }
   return "•";
+}
+
+// A "?" help affordance: a popup (on hover AND keyboard focus, so it's operable
+// without a mouse) with the selected provider's setup guidance, laid out neatly.
+function HelpTip({ help, providerLabel }) {
+  return (
+    <span className="help">
+      <button type="button" className="help-trigger" aria-label={`Setup help for ${providerLabel}`}>
+        ?
+      </button>
+      <span className="help-popup" role="tooltip">
+        <span className="help-summary">{help.summary}</span>
+        {help.scopes.length > 0 ? (
+          <span className="help-section">
+            <span className="help-h">Required scopes</span>
+            {help.scopes.map((scope) => (
+              <span key={scope} className="help-item">
+                <code>{scope}</code>
+              </span>
+            ))}
+          </span>
+        ) : null}
+        {help.notes.length > 0 ? (
+          <span className="help-section">
+            {help.notes.map((note) => (
+              <span key={note} className="help-item">• {note}</span>
+            ))}
+          </span>
+        ) : null}
+        {help.links.length > 0 ? (
+          <span className="help-links">
+            {help.links.map((link) => (
+              <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
+                {link.label}
+              </a>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  );
 }
 
 function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate, onRemove }) {
@@ -304,7 +388,10 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
       )}
 
       <form className="conn-add" onSubmit={submit}>
-        <h3>Add a connection</h3>
+        <div className="conn-add-head">
+          <h3>Add a connection</h3>
+          <HelpTip help={help} providerLabel={provider} />
+        </div>
 
         <div className="field">
           <label htmlFor="conn-provider">Service provider</label>
@@ -330,7 +417,6 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
             />
           </div>
         ))}
-        <p className="field-hint">{help.hint}</p>
 
         <div className="field">
           <label htmlFor="conn-label">Label (optional)</label>
@@ -340,14 +426,6 @@ function ConnectionsView({ connections, activeId, busy, error, onAdd, onActivate
             placeholder="e.g. Work / Personal — defaults to your username"
             onChange={(event) => setLabel(event.target.value)}
           />
-        </div>
-
-        <div className="settings-links">
-          {help.links.map((link) => (
-            <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
-              {link.label}
-            </a>
-          ))}
         </div>
 
         <div className="settings-actions">
@@ -806,6 +884,7 @@ export default function App() {
         user={user}
         hasToken={hasToken}
         connectionCount={connections.length}
+        provider={connections.find((c) => c.id === activeId)?.provider}
         repoFullName={currentRepoFull}
       />
       <div className="app-body">

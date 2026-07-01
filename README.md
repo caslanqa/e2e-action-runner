@@ -1,104 +1,167 @@
 # E2E Action Runner
 
-A small desktop app to trigger a GitHub Actions **end‑to‑end test workflow**, watch it
-run **live**, and read the **Playwright HTML report** — without opening the GitHub UI.
+A small desktop app to trigger a CI **end‑to‑end test pipeline**, watch it run **live**, and
+read the **test report** — across **GitHub Actions**, **GitLab CI**, and **Bitbucket
+Pipelines**, without opening each provider's web UI.
 
-Runs on **macOS** and **Windows** (Linux too). Your GitHub token stays on your machine,
-stored encrypted in the OS keychain — it is only ever sent to GitHub.
+Runs on **macOS** and **Windows** (Linux too). Your credentials stay on your machine,
+stored **encrypted in the OS keychain** — they're only ever sent to the provider you connect.
 
 **What you can do**
 
-- Pick a workflow + branch; its inputs form is generated automatically.
-- Trigger a run with one click and watch status, jobs, and steps update live.
-- Browse recent runs and reopen any past run.
-- View the Playwright HTML report inline, or download any artifact.
+- Connect **one or more accounts** across GitHub / GitLab / Bitbucket, and switch between them.
+- Pick a repository, a workflow/pipeline, and a branch; the inputs form is generated automatically.
+- Trigger a run with one click; watch status, jobs, and steps update live.
+- **Stop** a running run, browse **recent runs**, and reopen any past run.
+- View the **Playwright HTML report** inline, or download any artifact.
 
 ---
 
-## For end users
+# For end users
 
-### 1. Install
+## 1. Install
 
-Download the installer for your OS from the project's **[Releases](../../releases/latest)** page
+Download the installer for your OS from the **[Releases](../../releases/latest)** page
 (the repo is public — no login needed):
 
-| OS | Download | First launch (unsigned build, one time only) |
-| --- | --- | --- |
-| macOS (Apple Silicon) | `E2E.Action.Runner-<version>-arm64.dmg` | Open the .dmg, drag the app to **Applications**. The build is unsigned, so macOS blocks it ("unidentified developer" / "damaged"). Clear the quarantine flag once in Terminal, then open the app: <br>`xattr -cr "/Applications/E2E Action Runner.app"` |
-| Windows | `E2E.Action.Runner.Setup.<version>.exe` | Run it. If SmartScreen warns, click **More info → Run anyway**. |
+- **macOS (Apple Silicon):** `E2E.Action.Runner-<version>-arm64.dmg` → open it, drag the app to **Applications**.
+- **Windows:** `E2E.Action.Runner.Setup.<version>.exe` → run it. If SmartScreen warns, click **More info → Run anyway**.
+
+### ⚠️ macOS: "app is damaged and can't be opened" / "unidentified developer"
+
+The app is **not code‑signed yet**, so macOS quarantines it and may refuse to open it (often
+with a misleading "damaged" message). This is expected — fix it **once** by clearing the
+quarantine flag in **Terminal**:
+
+```bash
+xattr -cr "/Applications/E2E Action Runner.app"
+```
+
+Then open the app normally. (If you installed it somewhere else, point the command at that
+path.) You only need to do this once per install.
 
 > macOS builds are currently **Apple Silicon (arm64)** only. On an Intel Mac, ask the
-> maintainer for an Intel/universal build (see *Publishing a release*).
+> maintainer for an Intel/universal build.
 
-### 2. Add your GitHub token (one‑time)
+## 2. Connect an account
 
-The app acts on GitHub for you using a **fine‑grained Personal Access Token (PAT)**.
+1. Open the left sidebar (hover it) → **Connections**.
+2. **Add a connection** → choose the **provider** (GitHub / GitLab / Bitbucket).
+3. Fill in the credentials for that provider (see the per‑provider guides below) → **Add connection**.
+4. On the **Dashboard**, the **Account** dropdown lets you switch between connected accounts;
+   the **Repository** dropdown lists that account's repos.
 
-1. Open the left menu (hover the sidebar) → **Settings**.
-2. Click **Create new fine‑grained PAT ↗** — this opens GitHub in your browser.
-3. Create a token with:
-   - **Repository access:** the e2e test repository.
-   - **Permissions:** Actions → **Read and write**, Contents → **Read‑only**, Metadata → **Read‑only**.
-   - **Expiration:** your choice (e.g. 30 days).
-4. Copy the token, paste it into **Settings → GitHub token**, adjust **Owner/Repo** if needed, and click **Save settings**.
+Credentials are stored **encrypted** (macOS Keychain / Windows DPAPI) and never leave your
+machine except to call the provider. On the first save, macOS may ask to use the Keychain →
+choose **Always Allow**. You can add several accounts (even across providers) and switch
+anytime — no need to reconnect.
 
-When the token is valid you're taken straight to the Dashboard. The token is stored
-**encrypted** on your machine (macOS Keychain / Windows DPAPI) and never leaves it except
-to call GitHub. On the very first save, macOS may ask to use the Keychain → choose
-**Always Allow**.
+## 3. Provider setup guides
 
-### 3. Run a workflow
+Each provider needs a token/credential with the right scopes. Create it, then paste it into
+**Connections → Add a connection**.
 
-1. **Dashboard** → choose **Workflow** and **Branch**.
-2. Fill the inputs (pre‑filled with the workflow's defaults).
+### 🐙 GitHub
+
+1. Create a **fine‑grained PAT**: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+2. **Repository access:** the repo(s) you'll run workflows in.
+3. **Permissions:**
+
+   | Permission | Access | Why |
+   | --- | --- | --- |
+   | Actions | **Read and write** | Trigger workflows + read runs/artifacts |
+   | Contents | **Read‑only** | Read the workflow YAML to build the inputs form |
+   | Metadata | **Read‑only** | Always required |
+
+4. In the app: provider **GitHub**, paste the token.
+5. In the app, a "workflow" = a `.github/workflows/*.yml` with a `workflow_dispatch` trigger;
+   its `inputs` become the form.
+
+### 🦊 GitLab (gitlab.com)
+
+1. Create a **Personal Access Token**: [gitlab.com/-/user_settings/personal_access_tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
+2. **Scope:** `api` (needed to trigger pipelines).
+3. In the app: provider **GitLab**, paste the token.
+4. Notes: GitLab has one CI config, shown as a single **"Pipeline (.gitlab-ci.yml)"** workflow.
+   Inputs come from [`spec:inputs`](https://docs.gitlab.com/ci/inputs/) in your `.gitlab-ci.yml`
+   (if declared); otherwise you just trigger on a branch. Runs = pipelines; artifacts are per job.
+
+### 🪣 Bitbucket Cloud
+
+1. Create an **API token *with scopes***: [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+   → **"Create API token with scopes"** (not the plain one) → app **Bitbucket**.
+2. **Scopes:** 
+
+  * `read:repository:bitbucket`
+  * `read:pipeline:bitbucket`
+  * `read:workspace:bitbucket`
+  * `write:pipeline:bitbucket`
+  * `read:user:bitbucket`
+  * `read:project:bitbucket`
+  * `read:account:bitbucket`
+  
+3. In the app: provider **Bitbucket**, then enter **three** fields:
+   - **Atlassian email** (the account the token belongs to)
+   - **API token**
+   - **Workspace ID** — the name in your Bitbucket URL: `bitbucket.org/`**`<workspace>`**`/<repo>`
+4. Notes:
+   - **One connection = one workspace.** Atlassian removed cross‑workspace listing, so you set
+     the workspace per connection. For repos in another workspace, add another Bitbucket connection.
+   - A "workflow" = a **custom pipeline** from `bitbucket-pipelines.yml` (plus a "Branch pipeline")
+     and its `variables` become the inputs form.
+   - **Reports:** Bitbucket has no per‑run artifact download API, so the **Artifacts** list shows
+     the repo's **Downloads**. For "View report" to work, your pipeline must upload the report
+     there (e.g. via the `bitbucket-upload-file` pipe).
+
+## 4. Run a pipeline
+
+1. **Dashboard** → pick **Account** → **Repository** → **Workflow** → **Branch**.
+2. Fill any inputs (pre‑filled with defaults).
 3. Click **▶ Run workflow**.
-4. Watch live status: pass/fail badge, each job and step, and an elapsed timer.
-5. When it finishes, open the report under **Artifacts → View report**, or **Download** the raw files.
+4. Watch live status: pass/fail badge, jobs, steps, and an elapsed timer. Use **⊘ Stop run** to cancel.
+5. When it finishes, open the report under **Artifacts → View report**, or **Download** any artifact.
 
-You can also click any entry under **Recent runs** to reopen a past run and its report — no
-need to re‑run.
+Click any entry under **Recent runs** to reopen a past run + its report without re‑running.
 
-### 4. Renew your token when it expires
+## 5. Renew a token when it expires
 
-Fine‑grained PATs expire (often after 30 days). When yours does:
+Tokens expire (GitHub fine‑grained PATs often after 30 days). When one does, the app shows an
+auth error. Just create a fresh token (same scopes) and add/replace the connection under
+**Connections**.
 
-1. Left menu → **Settings** → **Create new fine‑grained PAT ↗** (or **Manage PATs ↗** to see existing ones).
-2. Generate a fresh token (same permissions), paste it, **Save**. Your Owner/Repo are kept.
-
-### Pointing at a different repository
-
-The Owner/Repo in **Settings** can be changed at any time — the app is not locked to one
-repo. Saving a new repo reloads its workflows and branches.
-
-### Troubleshooting
+## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
-| "No token" or 401 errors | Settings → paste a valid PAT → Save. |
-| "Token rejected (invalid or expired)" | The PAT expired or has wrong scopes — create a new one (Actions R/W · Contents R · Metadata R). |
-| Workflows don't load right after the first save | Bring the window to front and approve the one‑time macOS Keychain prompt. |
-| "This artifact has no viewable HTML report" | That artifact is raw data (e.g. allure‑results), not an HTML report — use **Download**. |
-| macOS: "app is damaged / can't be opened" or "unidentified developer" | The build is unsigned. Clear the quarantine flag once, then open it: `xattr -cr "/Applications/E2E Action Runner.app"` |
-| App won't open on an Intel Mac | The current macOS build is Apple Silicon only — request an Intel/universal build. |
-| Report looks too light/dark | The Playwright report follows your system color scheme. |
+| macOS won't open the app ("damaged" / "unidentified developer") | Run `xattr -cr "/Applications/E2E Action Runner.app"` once — see the macOS section above. |
+| "credentials lack one or more required privilege scopes" (Bitbucket) | Recreate the API token **with scopes** and include `read:repository:bitbucket`, `read:pipeline:bitbucket`, `write:pipeline:bitbucket`. |
+| Bitbucket repos don't load / "Could not load repositories" | Make sure the connection's **Workspace ID** matches `bitbucket.org/<workspace>` and the token has `read:repository:bitbucket`. |
+| "No connection" / 401 / token rejected | The token is missing, invalid, or expired — add a valid one under **Connections**. |
+| Repos don't load right after adding a connection | Bring the window to front and approve the one‑time macOS Keychain prompt. |
+| "This artifact has no viewable HTML report" | That artifact isn't an HTML report (e.g. raw results / a non‑report download) — use **Download**. |
+| App won't open on an Intel Mac | The macOS build is Apple Silicon only — request an Intel/universal build. |
 
 ---
 
-## For maintainers / developers
+# For maintainers / developers
 
-### How it works
+## How it works
 
 - **Electron** desktop shell. A small **Fastify** server runs *inside* the Electron main
-  process; it holds the token and calls the GitHub REST API (via Octokit). The window loads
-  the UI from that server on `127.0.0.1` — same origin, so no CORS and the token never
-  reaches the renderer.
+  process; it holds the credentials and calls each provider's REST API. The window loads the
+  UI from that server on `127.0.0.1` — same origin, so no CORS and credentials never reach the renderer.
+- **Provider abstraction:** each provider is an adapter (`server/providers/{github,gitlab,bitbucket}.js`)
+  implementing one interface (validate / listRepos / listWorkflows / getWorkflowInputs /
+  dispatch / listRuns / getRun / getRunJobs / listArtifacts / downloadArtifact / cancelRun).
+  `connections.js` keeps the multi‑account state and points routes at the **active** adapter + repo.
 - **React + Vite** UI.
-- Token is stored with Electron `safeStorage` (Keychain/DPAPI); owner/repo live in the app's
-  `userData` dir. In browser/dev mode, `.env` or a local `.e2e-runner-store.json` is used instead.
-- The new run is identified by snapshotting the workflow's run list before/after dispatch
-  (the dispatch API returns no run id), so no workflow changes are needed.
+- Credentials are stored with Electron `safeStorage` (Keychain/DPAPI) in the app's `userData`
+  dir (`connections.json` + encrypted `tokens.enc`). In browser/dev mode, `.env` or a local
+  `.e2e-runner-store.json` is used instead.
+- New‑run resolution differs per provider: GitHub's dispatch returns no id, so we snapshot the
+  run list before/after; GitLab and Bitbucket return the created pipeline directly.
 
-### Run in development
+## Run in development
 
 ```bash
 npm install
@@ -110,74 +173,46 @@ npm run dev          # http://localhost:5173
 npm run app
 ```
 
-For dev you can drop a token into `.env` (copy `.env.example`) so you don't re‑enter it each time.
+For dev you can drop a GitHub token into `.env` (copy `.env.example`) so it's pre‑connected.
 
-### Build installers locally
+## Build installers locally
 
 ```bash
 npm run dist:mac     # .dmg + .zip   — must run on macOS
 npm run dist:win     # .exe installer — must run on Windows
 ```
 
-Output is written to `release/`. `.dmg` builds only on macOS and `.exe` only on Windows, so
-use CI to produce both.
+Output goes to `release/`. `.dmg` builds only on macOS and `.exe` only on Windows — use CI for both.
 
-### Publishing a release
+## Publishing a release
 
 Releases are produced by the **Electron Production & Release Pipeline**
-(`.github/workflows/publish.yml`). It bumps the version, tags, builds macOS + Windows on
-native runners, and attaches the installers to a single GitHub Release.
+(`.github/workflows/publish.yml`): GitHub → **Actions** → run it, choose the SemVer bump,
+platform (`both`), and publish strategy (`draft` recommended). It bumps `package.json`, tags,
+builds macOS + Windows on native runners, and attaches the installers to a single GitHub Release.
 
-1. GitHub → **Actions** → **Electron Production & Release Pipeline** → **Run workflow**.
-2. Choose the inputs:
-   - **SemVer Release Type** — `patch` / `minor` / `major` (or `none_build_only` to just build).
-   - **Target Platform** — `both` (or a single OS).
-   - **Publish Strategy** — `draft` (recommended: review, then publish), `release` (publish immediately), or `artifact` (no release, run artifacts only).
-3. The pipeline bumps `package.json`, commits + tags, builds both OSes, and creates the release.
-4. For `draft`: open **Releases**, review, then click **Publish release**. Colleagues download from there.
+- **One copy of each asset — by design:** electron-builder runs `--publish never`; the release
+  is created only by the `finalize-release` step (softprops). `build.yml` is a build‑only helper.
+- **Code signing** isn't set up → unsigned installers (hence the macOS/SmartScreen prompts).
+  Add an Apple Developer ID + a Windows signing cert for friction‑free installs.
+- **Intel Macs:** the mac job builds arm64; add `--x64`/`--universal` to also ship Intel.
 
-**One copy of each asset — by design.** electron-builder runs with `--publish never`; the
-release is created *only once*, by the `finalize-release` step (softprops). Letting
-electron-builder publish as well would upload every asset twice (this was the old
-duplicate‑assets bug). `build.yml` is a **build‑only** helper — it produces run artifacts and
-never creates a release.
-
-Assets attached to each release:
-
-| Asset | Platform |
-| --- | --- |
-| `E2E.Action.Runner.Setup.<version>.exe` (+ `.blockmap`) | Windows installer |
-| `E2E.Action.Runner-<version>-arm64.dmg` (+ `.blockmap`) | macOS (Apple Silicon) |
-| `E2E.Action.Runner-<version>-arm64-mac.zip` (+ `.blockmap`) | macOS auto‑update package |
-| `latest.yml` / `latest-mac.yml` | auto‑update metadata (don't delete) |
-
-> **Intel Macs:** the macOS job builds for the runner's arch (arm64). To also ship Intel,
-> build the mac target with `--x64` or `--universal` (e.g. a second matrix entry).
->
-> **Code signing** is not set up, so installers are unsigned (hence the Gatekeeper /
-> SmartScreen prompts above). Add an Apple Developer ID + a Windows signing certificate for
-> friction‑free installs.
-
-### Required PAT permissions (on the target repo)
-
-| Permission | Access | Why |
-| --- | --- | --- |
-| Actions | Read and write | Trigger the workflow + read runs/artifacts |
-| Contents | Read‑only | Read the workflow YAML to build the input form |
-| Metadata | Read‑only | Always required |
-
-### Project structure
+## Project structure
 
 ```
-server/    Fastify API — github.js (Octokit), app.js (routes + static), report.js (artifact unzip)
-electron/  Electron main + preload (CommonJS)
-web/       React + Vite UI
+server/
+  app.js          Fastify routes (provider-agnostic) + serves the built UI + reports
+  connections.js  multi-account state, active connection, keychain persistence hook
+  providers/      github.js · gitlab.js · bitbucket.js (one adapter each) + index.js (registry)
+  report.js       unzip an artifact and serve its index.html for the report iframe
+electron/         Electron main + preload (CommonJS); runs the server, opens the window
+web/              React + Vite UI (single App.jsx: Sidebar, Connections, Dashboard)
 .github/workflows/
-  publish.yml   Release pipeline (bump → build mac+win → single GitHub Release)
-  build.yml     Build-only (run artifacts, never publishes)
+  publish.yml     Release pipeline (bump → build mac+win → single GitHub Release)
+  build.yml       Build-only (run artifacts, never publishes)
 ```
 
-### npm scripts
+## npm scripts
 
 | Script | Purpose |
 | --- | --- |

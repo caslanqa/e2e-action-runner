@@ -42,7 +42,7 @@ function mapState(state) {
   return { status: "queued", conclusion: null };
 }
 
-export function createBitbucketAdapter({ email, token } = {}) {
+export function createBitbucketAdapter({ email, token, workspace } = {}) {
   const authHeader = "Basic " + Buffer.from(`${email ?? ""}:${token ?? ""}`).toString("base64");
   let repo = null;
 
@@ -183,33 +183,32 @@ export function createBitbucketAdapter({ email, token } = {}) {
         const user = await bb("/user");
         return { login: user.display_name || user.nickname || user.username || email || "bitbucket" };
       } catch (err) {
-        if (err.status === 401 || err.status === 403) {
-          await bb("/repositories?role=member&pagelen=1");
-          return { login: email || "bitbucket" };
+        if ((err.status === 401 || err.status === 403) && workspace) {
+          // Workspace-scoped check (cross-workspace listing was removed by CHANGE-2770).
+          await bb(`/repositories/${workspace}?pagelen=1`);
+          return { login: email || workspace || "bitbucket" };
         }
         throw err;
       }
     },
 
     async listRepos() {
-      // Enumerate the user's workspaces, then repos in each — matches what the
-      // user sees in Bitbucket. (role=member misses repos granted via groups.)
-      const workspaces = await bbAll("/workspaces?pagelen=100");
-      const repos = [];
-      for (const ws of workspaces) {
-        const wsRepos = await bbAll(`/repositories/${ws.slug}?pagelen=100&sort=-updated_on`);
-        for (const r of wsRepos) {
-          repos.push({
-            id: r.full_name,
-            fullName: r.full_name,
-            workspace: r.workspace?.slug ?? ws.slug,
-            slug: r.slug,
-            private: r.is_private,
-            defaultBranch: r.mainbranch?.name,
-          });
-        }
+      // Workspace-scoped listing. Atlassian removed cross-workspace/global repo
+      // listing (CHANGE-2770), so each connection specifies its workspace.
+      if (!workspace) {
+        const error = new Error("A Bitbucket workspace is required — set it on the connection.");
+        error.status = 400;
+        throw error;
       }
-      return repos;
+      const repos = await bbAll(`/repositories/${workspace}?pagelen=100&sort=-updated_on`);
+      return repos.map((r) => ({
+        id: r.full_name,
+        fullName: r.full_name,
+        workspace: r.workspace?.slug ?? workspace,
+        slug: r.slug,
+        private: r.is_private,
+        defaultBranch: r.mainbranch?.name,
+      }));
     },
 
     async getRepoMeta() {
