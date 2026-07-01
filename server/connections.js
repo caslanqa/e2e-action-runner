@@ -1,37 +1,55 @@
-import * as gh from "./github.js";
+import { createAdapter, isSupported } from "./providers/index.js";
 
-// A "connection" is a saved account credential for a provider. For now only
-// GitHub is implemented; the shape is provider-agnostic so GitLab/Bitbucket
-// adapters can be added later. Exactly one connection is "active" at a time —
-// switching it just re-points github.js at that connection's token + repo.
+// A "connection" is a saved account for a provider (github now; gitlab/bitbucket
+// later). Exactly one connection is active at a time; the active connection's
+// adapter + selected repository serve every request.
 //
-// Public state never contains tokens. Tokens are persisted by the host
-// (encrypted via the OS keychain in the desktop app).
+// Public state never contains credentials. Credentials are persisted by the
+// host (encrypted via the OS keychain in the desktop app).
 
-let state = { connections: [], tokens: {}, activeId: null, repos: {} };
+let state = { connections: [], creds: {}, activeId: null, repos: {} };
 let persistCb = null;
 let seq = 0;
+const adapters = new Map();
 
-function applyActive() {
-  const id = state.activeId;
-  gh.setToken(id ? state.tokens[id] || null : null);
-  const repo = (id && state.repos[id]) || {};
-  gh.setActiveRepo(repo.owner || "", repo.repo || "");
+function adapterFor(id) {
+  if (!id) {
+    return null;
+  }
+  if (!adapters.has(id)) {
+    const connection = state.connections.find((c) => c.id === id);
+    if (!connection) {
+      return null;
+    }
+    adapters.set(id, createAdapter(connection.provider, state.creds[id] || {}));
+  }
+  const adapter = adapters.get(id);
+  adapter.setRepo(state.repos[id] || null);
+  return adapter;
+}
+
+/** The active connection's adapter (repo already applied), or throw. */
+export function active() {
+  const adapter = adapterFor(state.activeId);
+  if (!adapter) {
+    const error = new Error("No active connection — add one first.");
+    error.status = 400;
+    throw error;
+  }
+  return adapter;
 }
 
 function persist() {
   if (!persistCb) {
     return;
   }
-  // Snapshot now, write after the response is queued. The desktop keychain write
-  // is synchronous and can briefly block the main process the first time access
-  // is granted; deferring it keeps requests from appearing to freeze.
   const snapshot = {
     connections: [...state.connections],
-    tokens: { ...state.tokens },
+    creds: { ...state.creds },
     activeId: state.activeId,
     repos: { ...state.repos },
   };
+  // Defer so a synchronous keychain write can't stall the response (freeze).
   setImmediate(() => {
     try {
       persistCb(snapshot);
@@ -41,70 +59,65 @@ function persist() {
   });
 }
 
-/** Load persisted state (no network) and apply the active connection. */
-export function init({ connections = [], tokens = {}, activeId = null, repos = {} } = {}, onChange = null) {
+/** Load persisted state (no network). Adapters are created lazily on demand. */
+export function init({ connections = [], creds = {}, activeId = null, repos = {} } = {}, onChange = null) {
   const list = Array.isArray(connections) ? connections : [];
   state = {
     connections: list,
-    tokens: tokens && typeof tokens === "object" ? tokens : {},
+    creds: creds && typeof creds === "object" ? creds : {},
     activeId: activeId ?? (list[0]?.id ?? null),
     repos: repos && typeof repos === "object" ? repos : {},
   };
   persistCb = onChange;
+  adapters.clear();
   for (const connection of list) {
     const n = Number(String(connection.id).replace(/\D/g, ""));
     if (Number.isFinite(n) && n > seq) {
       seq = n;
     }
   }
-  applyActive();
 }
 
-/** Public state — safe to send to the UI (no tokens). */
+/** Public state — safe to send to the UI (no credentials). */
 export function getState() {
-  const active = state.connections.find((c) => c.id === state.activeId) || null;
+  const activeConn = state.connections.find((c) => c.id === state.activeId) || null;
   const activeRepo = (state.activeId && state.repos[state.activeId]) || { owner: "", repo: "" };
   return {
-    connections: state.connections.map((c) => ({
-      id: c.id,
-      provider: c.provider,
-      label: c.label,
-      login: c.login,
-    })),
+    connections: state.connections.map((c) => ({ id: c.id, provider: c.provider, label: c.label, login: c.login })),
     activeId: state.activeId,
-    active,
+    active: activeConn,
     activeRepo,
-    hasActiveToken: Boolean(state.activeId && state.tokens[state.activeId]),
+    hasActiveToken: Boolean(state.activeId && state.creds[state.activeId]),
   };
 }
 
-/** Add a GitHub connection. Validates the token first (throws 401 if invalid). */
-export async function addGitHub(token, label) {
-  const clean = String(token || "").trim();
-  if (!clean) {
-    const error = new Error("A token is required.");
+/** Add a connection. Validates the credentials first (throws if invalid). */
+export async function addConnection(provider, credentials, label) {
+  if (!isSupported(provider)) {
+    const error = new Error(`Provider "${provider}" is not supported yet.`);
     error.status = 400;
     throw error;
   }
-  const login = await gh.getUserFor(clean);
+  const adapter = createAdapter(provider, credentials);
+  const { login } = await adapter.validate();
   const id = `conn_${++seq}`;
-  state.connections.push({ id, provider: "github", label: (label && label.trim()) || login, login });
-  state.tokens[id] = clean;
+  state.connections.push({ id, provider, label: (label && label.trim()) || login, login });
+  state.creds[id] = credentials;
+  adapters.set(id, adapter);
   state.activeId = id;
   persist();
-  applyActive();
   return getState();
 }
 
 export function remove(id) {
   state.connections = state.connections.filter((c) => c.id !== id);
-  delete state.tokens[id];
+  delete state.creds[id];
   delete state.repos[id];
+  adapters.delete(id);
   if (state.activeId === id) {
     state.activeId = state.connections[0]?.id ?? null;
   }
   persist();
-  applyActive();
   return getState();
 }
 
@@ -116,18 +129,16 @@ export function setActive(id) {
   }
   state.activeId = id;
   persist();
-  applyActive();
   return getState();
 }
 
-export function setActiveRepo(owner, repo) {
+export function setActiveRepo(descriptor) {
   if (!state.activeId) {
     const error = new Error("No active connection — add one first.");
     error.status = 400;
     throw error;
   }
-  state.repos[state.activeId] = { owner: owner || "", repo: repo || "" };
+  state.repos[state.activeId] = descriptor || null;
   persist();
-  applyActive();
   return getState();
 }
